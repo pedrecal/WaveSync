@@ -9,6 +9,8 @@
   let isPlaying = false;
   let currentTime = '0:00';
   let duration = '0:00';
+  let zoomLevel = 20; // 1 = normal, higher = more zoomed in
+  let isAudioReady = false;
 
   onMount(() => {
     // Initialize WaveSurfer
@@ -20,6 +22,7 @@
       barWidth: 2,
       barGap: 1,
       barRadius: 2,
+      fillParent: true
     });
 
     // Event listeners
@@ -33,6 +36,9 @@
 
     wavesurfer.on('ready', () => {
       duration = formatTime(wavesurfer!.getDuration());
+      isAudioReady = true;
+      // Apply initial zoom level
+      wavesurfer!.zoom(zoomLevel);
     });
 
     wavesurfer.on('audioprocess', () => {
@@ -60,14 +66,26 @@
 
   function loadAudioFile() {
     if (audioFile && wavesurfer) {
+      isAudioReady = false; // Reset audio ready state
       const url = URL.createObjectURL(audioFile);
       wavesurfer.load(url);
+    }
+  }
+
+  function handleZoomChange() {
+    if (wavesurfer && isAudioReady) {
+      wavesurfer.zoom(zoomLevel);
     }
   }
 
   // Watch for changes to audioFile prop
   $: if (audioFile && wavesurfer) {
     loadAudioFile();
+  }
+
+  // Watch for zoom level changes
+  $: if (wavesurfer && zoomLevel && isAudioReady) {
+    handleZoomChange();
   }
 </script>
 
@@ -87,6 +105,21 @@
   <!-- Waveform container -->
   <div bind:this={waveformContainer} class="waveform"></div>
   
+  <!-- Zoom Controls -->
+  <div class="zoom-controls">
+    <label for="zoom-slider">Zoom:</label>
+    <input 
+      id="zoom-slider"
+      type="range" 
+      min="1" 
+      max="500" 
+      bind:value={zoomLevel}
+      class="zoom-slider"
+      disabled={!audioFile}
+    />
+    <span class="zoom-value">{zoomLevel}x</span>
+  </div>
+
   <!-- Controls -->
   <div class="controls">
     <button 
@@ -107,7 +140,7 @@
 
 <style>
   .wave-player {
-    max-width: 800px;
+    max-width: 95vw; /* Use most of the viewport width */
     margin: 2rem auto;
     padding: 2rem;
     border: 1px solid #e2e8f0;
@@ -147,10 +180,12 @@
   .waveform {
     margin: 1rem 0;
     border-radius: 6px;
-    overflow: hidden;
+    overflow-x: auto; /* Enable horizontal scrolling when zoomed */
+    overflow-y: hidden;
     background: #f8fafc;
     min-height: 100px;
     border: 1px solid #e2e8f0;
+    width: 100%;
   }
 
   .controls {
@@ -195,5 +230,66 @@
 
   .separator {
     color: #94a3b8;
+  }
+
+  .zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background: #f1f5f9;
+    border-radius: 6px;
+  }
+
+  .zoom-controls label {
+    font-weight: 500;
+    color: #475569;
+    min-width: 50px;
+  }
+
+  .zoom-slider {
+    flex: 1;
+    height: 6px;
+    background: #cbd5e1;
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+  }
+
+  .zoom-slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    background: #4f46e5;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .zoom-slider::-webkit-slider-thumb:hover {
+    background: #4338ca;
+  }
+
+  .zoom-slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    background: #4f46e5;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+  }
+
+  .zoom-slider:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .zoom-value {
+    min-width: 60px;
+    text-align: right;
+    font-family: 'Courier New', monospace;
+    font-weight: 500;
+    color: #475569;
   }
 </style>
