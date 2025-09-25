@@ -2,19 +2,27 @@
   import { onMount } from 'svelte';
   import WaveSurfer from 'wavesurfer.js';
   import Hover from 'wavesurfer.js/dist/plugins/hover.esm.js'
-
+  import Regions from 'wavesurfer.js/dist/plugins/regions.esm.js'
+  import type { SubtitleEntry } from '../lib/srt-parser';
+  import { parseTimestamp } from '../lib/srt-parser';
 
   export let audioFile: File | null = null;
+  export let subtitles: SubtitleEntry[] = [];
 
   let waveformContainer: HTMLDivElement;
   let wavesurfer: WaveSurfer | null = null;
+  let regionsPlugin: any = null;
   let isPlaying = false;
   let currentTime = '0:00';
   let duration = '0:00';
   let zoomLevel = 20; // 1 = normal, higher = more zoomed in
   let isAudioReady = false;
+  let currentSubtitle: SubtitleEntry | null = null;
 
   onMount(() => {
+    // Initialize plugins
+    regionsPlugin = Regions.create();
+    
     // Initialize WaveSurfer
     wavesurfer = WaveSurfer.create({
       container: waveformContainer,
@@ -35,6 +43,7 @@
           labelPreferLeft: false,
           formatTimeCallback: formatTimeSRT,
         }),
+        regionsPlugin,
       ],
     });
 
@@ -64,10 +73,24 @@
       isAudioReady = true;
       // Apply initial zoom level
       wavesurfer!.zoom(zoomLevel);
+      // Create subtitle regions if subtitles are available
+      createSubtitleRegions();
     });
 
     wavesurfer.on('audioprocess', () => {
-      currentTime = formatTime(wavesurfer!.getCurrentTime());
+      const currentTimeSeconds = wavesurfer!.getCurrentTime();
+      currentTime = formatTime(currentTimeSeconds);
+      
+      // Update current subtitle based on playback time
+      currentSubtitle = findActiveSubtitle(currentTimeSeconds);
+    });
+
+    wavesurfer.on('interaction', () => {
+      const currentTimeSeconds = wavesurfer!.getCurrentTime();
+      currentTime = formatTime(currentTimeSeconds);
+      
+      // Update current subtitle when seeking/clicking
+      currentSubtitle = findActiveSubtitle(currentTimeSeconds);
     });
 
     return () => {
@@ -93,6 +116,81 @@
     const ms = totalMs % 1000;
     
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`;
+  }
+
+  // Convert SRT timestamp (HH:MM:SS,mmm) to seconds for WaveSurfer regions
+  function convertSRTTimeToSeconds(srtTimestamp: string): number {
+    const milliseconds = parseTimestamp(srtTimestamp);
+    return milliseconds / 1000;
+  }
+
+  // Find the subtitle that should be active at the given time (in seconds)
+  function findActiveSubtitle(currentTimeSeconds: number): SubtitleEntry | null {
+    if (!subtitles || subtitles.length === 0) {
+      return null;
+    }
+
+    for (const subtitle of subtitles) {
+      const startSeconds = convertSRTTimeToSeconds(subtitle.startTime);
+      const endSeconds = convertSRTTimeToSeconds(subtitle.endTime);
+      
+      if (currentTimeSeconds >= startSeconds && currentTimeSeconds <= endSeconds) {
+        return subtitle;
+      }
+    }
+    
+    return null;
+  }
+
+  // Create regions for subtitle entries
+  function createSubtitleRegions() {
+    if (!regionsPlugin || !subtitles || subtitles.length === 0) {
+      return;
+    }
+
+    // Clear existing regions first
+    regionsPlugin.clearRegions();
+
+    // Create a region for each subtitle
+    subtitles.forEach((subtitle, index) => {
+      const start = convertSRTTimeToSeconds(subtitle.startTime);
+      const end = convertSRTTimeToSeconds(subtitle.endTime);
+      
+      // Generate color based on subtitle index for visual variety
+      const colors = [
+        '#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', 
+        '#06b6d4', '#84cc16', '#f97316', '#ec4899', '#6366f1'
+      ];
+      const color = colors[index % colors.length];
+      
+      const region = regionsPlugin.addRegion({
+        start: start,
+        end: end,
+        color: color + '40', // Add transparency
+        content: `${subtitle.id}: ${subtitle.text.join(' ')}`, // Show ID and text
+        drag: false, // Disable dragging for now
+        resize: false, // Disable resizing for now
+      });
+
+      // Add hover effects and interactions
+      region.on('click', () => {
+        console.log(`Subtitle ${subtitle.id}: ${subtitle.text.join(' ')}`);
+        // Optionally seek to this position
+        if (wavesurfer) {
+          wavesurfer.seekTo(start / wavesurfer.getDuration());
+        }
+      });
+
+      region.on('enter', () => {
+        // Make region more visible on hover
+        region.setOptions({ color: color + '60' });
+      });
+
+      region.on('leave', () => {
+        // Return to normal transparency
+        region.setOptions({ color: color + '40' });
+      });
+    });
   }
 
   function togglePlayPause() {
@@ -124,6 +222,11 @@
   $: if (wavesurfer && zoomLevel && isAudioReady) {
     handleZoomChange();
   }
+
+  // Watch for changes to subtitles prop
+  $: if (subtitles && isAudioReady && regionsPlugin) {
+    createSubtitleRegions();
+  }
 </script>
 
 <div class="wave-player">
@@ -139,6 +242,27 @@
     </div>
   {/if}
   
+  <!-- Current Subtitle Display -->
+  {#if subtitles && subtitles.length > 0}
+    <div class="subtitle-display">
+      {#if currentSubtitle}
+        <div class="subtitle-content">
+          <span class="subtitle-id">#{currentSubtitle.id}</span>
+          <span class="subtitle-time">{currentSubtitle.startTime} → {currentSubtitle.endTime}</span>
+          <div class="subtitle-text">
+            {#each currentSubtitle.text as line}
+              <div>{line}</div>
+            {/each}
+          </div>
+        </div>
+      {:else}
+        <div class="subtitle-content no-subtitle">
+          <span class="no-subtitle-text">No subtitle at current time</span>
+        </div>
+      {/if}
+    </div>
+  {/if}
+
   <!-- Waveform container -->
   <div bind:this={waveformContainer} class="waveform"></div>
   
@@ -197,6 +321,62 @@
   .player-info p {
     margin: 0;
     color: #475569;
+  }
+
+  .subtitle-display {
+    margin: 1rem 0;
+    padding: 1.5rem;
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    border-radius: 8px;
+    border: 1px solid #475569;
+    min-height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .subtitle-content {
+    text-align: center;
+    color: white;
+    width: 100%;
+  }
+
+  .subtitle-content.no-subtitle {
+    opacity: 0.6;
+  }
+
+  .subtitle-id {
+    display: inline-block;
+    background: #4f46e5;
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-right: 0.75rem;
+  }
+
+  .subtitle-time {
+    font-family: 'Courier New', monospace;
+    font-size: 0.875rem;
+    color: #94a3b8;
+    margin-bottom: 0.75rem;
+  }
+
+  .subtitle-text {
+    font-size: 1.125rem;
+    line-height: 1.6;
+    font-weight: 500;
+    margin-top: 0.75rem;
+  }
+
+  .subtitle-text div {
+    margin: 0.25rem 0;
+  }
+
+  .no-subtitle-text {
+    font-style: italic;
+    color: #94a3b8;
   }
 
   .waveform {
@@ -269,5 +449,38 @@
     font-family: 'Courier New', monospace;
     font-weight: 500;
     color: #475569;
+  }
+
+  /* Global styles for WaveSurfer regions */
+  :global(.wavesurfer-region) {
+    border-radius: 3px;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+  }
+
+  :global(.wavesurfer-region:hover) {
+    opacity: 0.8;
+  }
+
+  :global(.wavesurfer-region-content) {
+    position: absolute;
+    top: 0;
+    left: 2px;
+    right: 2px;
+    padding: 2px 4px;
+    font-size: 10px;
+    font-weight: 500;
+    color: #1f2937;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+    line-height: 1.2;
+  }
+
+  :global(.wavesurfer-region-content:empty) {
+    display: none;
   }
 </style>

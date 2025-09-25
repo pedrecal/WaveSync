@@ -70,7 +70,7 @@
       </div>
       
       {#if selectedAudioFile}
-        <SimpleWavePlayer audioFile={selectedAudioFile} />
+        <SimpleWavePlayer audioFile={selectedAudioFile} subtitles={parsedSubtitles} />
       {/if}
     </div>
   {/if}
