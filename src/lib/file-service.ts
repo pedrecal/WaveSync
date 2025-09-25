@@ -118,6 +118,15 @@ export class FileUtils {
   }
 
   /**
+   * Check if file is an audio format
+   */
+  static isAudioFile(filename: string): boolean {
+    const audioExtensions = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac'];
+    const ext = filename.toLowerCase().substring(filename.lastIndexOf('.'));
+    return audioExtensions.includes(ext);
+  }
+
+  /**
    * Check if file is an SRT subtitle
    */
   static isSRTFile(filename: string): boolean {

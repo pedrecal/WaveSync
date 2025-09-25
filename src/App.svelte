@@ -1,17 +1,18 @@
 <script lang="ts">
   import FileUpload from './components/FileUpload.svelte';
   import SubtitleDisplay from './components/SubtitleDisplay.svelte';
+  import SimpleAudioUpload from './components/SimpleAudioUpload.svelte';
   import type { SubtitleEntry } from './lib/srt-parser';
   
-  let selectedVideoFile: File | null = null;
+  let selectedAudioFile: File | null = null;
   let selectedSRTFile: File | null = null;
   let errorMessage = '';
   let parsedSubtitles: SubtitleEntry[] = [];
   
-  function handleVideoSelected(event: CustomEvent<{ file: File }>) {
-    selectedVideoFile = event.detail.file;
+  function handleAudioSelected(event: CustomEvent<{ file: File }>) {
+    selectedAudioFile = event.detail.file;
     errorMessage = '';
-    console.log('Video selected:', selectedVideoFile.name);
+    console.log('Audio selected:', selectedAudioFile.name);
   }
   
   function handleSRTSelected(event: CustomEvent<{ file: File }>) {
@@ -22,24 +23,30 @@
   
   function handleError(event: CustomEvent<{ message: string }>) {
     errorMessage = event.detail.message;
-    console.error('File error:', errorMessage);
+    console.error('Error:', errorMessage);
   }
   
   function handleSubtitlesParsed(event: CustomEvent<{ entries: SubtitleEntry[] }>) {
     parsedSubtitles = event.detail.entries;
     console.log('Subtitles parsed:', parsedSubtitles.length, 'entries');
   }
+  
+  function handleAudioUploaded(event: CustomEvent<{ file: File }>) {
+    selectedAudioFile = event.detail.file;
+    errorMessage = '';
+    console.log('Audio uploaded:', selectedAudioFile.name);
+  }
 </script>
 
 <main>
   <header>
     <h1>🎵 WaveSync</h1>
-    <p>Synchronize subtitles with audio waveforms</p>
+    <p>Synchronize subtitles with audio files</p>
   </header>
 
   <div class="upload-section">
     <FileUpload 
-      on:videoSelected={handleVideoSelected}
+      on:audioSelected={handleAudioSelected}
       on:srtSelected={handleSRTSelected}
       on:error={handleError}
     />
@@ -51,13 +58,27 @@
     {/if}
   </div>
 
-  <div class="content-section">
-    <SubtitleDisplay 
-      srtFile={selectedSRTFile}
-      on:parsed={handleSubtitlesParsed}
-      on:error={handleError}
-    />
-  </div>
+  {#if selectedAudioFile || selectedSRTFile}
+    <div class="content-section">
+      <div class="subtitle-section">
+        <SubtitleDisplay 
+          srtFile={selectedSRTFile}
+          on:parsed={handleSubtitlesParsed}
+          on:error={handleError}
+        />
+      </div>
+      
+      {#if selectedAudioFile}
+        <div class="audio-section">
+          <div class="audio-info">
+            <h3>🎵 Audio File</h3>
+            <p><strong>{selectedAudioFile.name}</strong></p>
+            <p>Ready for waveform visualization</p>
+          </div>
+        </div>
+      {/if}
+    </div>
+  {/if}
 </main>
 
 <style>
@@ -94,6 +115,31 @@
   
   .content-section {
     margin-bottom: 2rem;
+  }
+  
+  .subtitle-section {
+    background: #1f2937;
+    padding: 1.5rem;
+    border-radius: 12px;
+    border: 1px solid #374151;
+    margin-bottom: 2rem;
+  }
+
+  .audio-section {
+    background: #1e293b;
+    padding: 1.5rem;
+    border-radius: 12px;
+    border: 1px solid #334155;
+  }
+
+  .audio-info h3 {
+    margin: 0 0 1rem 0;
+    color: #f59e0b;
+  }
+
+  .audio-info p {
+    margin: 0.5rem 0;
+    color: #d1d5db;
   }
   
   .error-message {

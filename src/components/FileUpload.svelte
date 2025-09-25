@@ -3,14 +3,14 @@
   import { WebFileService, FileUtils } from '../lib/file-service';
   
   const dispatch = createEventDispatcher<{
-    videoSelected: { file: File };
+    audioSelected: { file: File };
     srtSelected: { file: File };
     error: { message: string };
   }>();
   
   let isDragOver = false;
   let isProcessing = false;
-  let selectedVideoFile: File | null = null;
+  let selectedAudioFile: File | null = null;
   let selectedSRTFile: File | null = null;
   
   const fileService = new WebFileService();
@@ -38,29 +38,24 @@
     try {
       isProcessing = true;
       
-      // Separate video and SRT files
-      const videoFiles = files.filter(f => FileUtils.isVideoFile(f.name));
+      // Separate audio and SRT files
+      const audioFiles = files.filter(f => FileUtils.isAudioFile(f.name));
       const srtFiles = files.filter(f => FileUtils.isSRTFile(f.name));
       
-      if (videoFiles.length === 0 && srtFiles.length === 0) {
-        dispatch('error', { message: 'Please drop a video file (.mp4, .mkv, etc.) or SRT subtitle file' });
+      if (audioFiles.length === 0 && srtFiles.length === 0) {
+        dispatch('error', { message: 'Please drop an audio file (.mp3, .wav, etc.) or SRT subtitle file' });
         return;
       }
       
-      // Process video file
-      if (videoFiles.length > 0) {
-        const videoFile = videoFiles[0];
+      // Process audio file
+      if (audioFiles.length > 0) {
+        const audioFile = audioFiles[0];
         
-        // Validate file size (warn for files > 2GB)
-        if (!FileUtils.validateFileSize(videoFile, 2048)) {
-          console.warn(`Large file detected: ${FileUtils.formatFileSize(videoFile.size)}`);
-        }
-        
-        selectedVideoFile = videoFile;
-        dispatch('videoSelected', { file: videoFile });
+        selectedAudioFile = audioFile;
+        dispatch('audioSelected', { file: audioFile });
         
         // Try to find matching SRT in the dropped files
-        const baseName = FileUtils.getBaseName(videoFile.name);
+        const baseName = FileUtils.getBaseName(audioFile.name);
         const matchingSRT = srtFiles.find(srt => {
           const srtBaseName = FileUtils.getBaseName(srt.name);
           return srtBaseName === baseName;
@@ -89,16 +84,16 @@
   }
   
   // Manual file selection
-  async function selectVideoFile() {
+  async function selectAudioFile() {
     try {
-      const file = await fileService.pickFile('.mp4,.mkv,.avi,.mov,.wmv,.flv,.webm,.m4v');
+      const file = await fileService.pickFile('.mp3,.wav,.m4a,.aac,.ogg,.flac');
       if (file) {
-        selectedVideoFile = file;
-        dispatch('videoSelected', { file });
+        selectedAudioFile = file;
+        dispatch('audioSelected', { file });
       }
     } catch (error) {
       dispatch('error', { 
-        message: error instanceof Error ? error.message : 'Failed to select video file' 
+        message: error instanceof Error ? error.message : 'Failed to select audio file' 
       });
     }
   }
@@ -118,7 +113,7 @@
   }
   
   function clearFiles() {
-    selectedVideoFile = null;
+    selectedAudioFile = null;
     selectedSRTFile = null;
   }
 </script>
@@ -141,13 +136,13 @@
       </div>
     {:else}
       <div class="drop-content">
-        <div class="drop-icon">📁</div>
+        <div class="drop-icon">🎵</div>
         <h3>Drop your files here</h3>
-        <p>Drag & drop video files (.mp4, .mkv, etc.) and SRT subtitles</p>
+        <p>Drag & drop audio files (.mp3, .wav, etc.) and SRT subtitles</p>
         <p class="or">or</p>
         <div class="button-group">
-          <button type="button" on:click={selectVideoFile} class="select-button">
-            Select Video File
+          <button type="button" on:click={selectAudioFile} class="select-button">
+            Select Audio File
           </button>
           <button type="button" on:click={selectSRTFile} class="select-button">
             Select SRT File
@@ -157,20 +152,20 @@
     {/if}
   </div>
   
-  {#if selectedVideoFile || selectedSRTFile}
+  {#if selectedAudioFile || selectedSRTFile}
     <div class="selected-files">
       <div class="files-header">
         <h4>Selected Files</h4>
         <button type="button" on:click={clearFiles} class="clear-button">Clear All</button>
       </div>
       
-      {#if selectedVideoFile}
-        <div class="file-item video-file">
-          <div class="file-icon">🎬</div>
+      {#if selectedAudioFile}
+        <div class="file-item audio-file">
+          <div class="file-icon">�</div>
           <div class="file-info">
-            <div class="file-name">{selectedVideoFile.name}</div>
+            <div class="file-name">{selectedAudioFile.name}</div>
             <div class="file-details">
-              {FileUtils.formatFileSize(selectedVideoFile.size)} • Video
+              {FileUtils.formatFileSize(selectedAudioFile.size)} • Audio
             </div>
           </div>
         </div>
@@ -360,8 +355,8 @@
     color: #666;
   }
   
-  .video-file {
-    background: linear-gradient(90deg, #fff5f5, transparent);
+  .audio-file {
+    background: linear-gradient(90deg, #f5fff5, transparent);
   }
   
   .srt-file {
