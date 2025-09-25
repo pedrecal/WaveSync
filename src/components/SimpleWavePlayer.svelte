@@ -15,7 +15,7 @@
   let isPlaying = false;
   let currentTime = '0:00';
   let duration = '0:00';
-  let zoomLevel = 20; // 1 = normal, higher = more zoomed in
+  let zoomLevel = 500; // 1 = normal, higher = more zoomed in
   let isAudioReady = false;
   let currentSubtitle: SubtitleEntry | null = null;
   let isSyncMode = false;
@@ -25,6 +25,7 @@
   let selectedAudioTime = 0;
   let searchQuery = '';
   let filteredSubtitles: SubtitleEntry[] = [];
+  let timeInput = '00:00:00.000';
 
   onMount(() => {
     // Initialize plugins
@@ -87,6 +88,7 @@
     wavesurfer.on('audioprocess', () => {
       const currentTimeSeconds = wavesurfer!.getCurrentTime();
       currentTime = formatTimeSRT(currentTimeSeconds);
+      timeInput = formatTimestamp(currentTimeSeconds * 1000);
       
       // Update current subtitle based on playback time
       currentSubtitle = findActiveSubtitle(currentTimeSeconds);
@@ -95,6 +97,7 @@
     wavesurfer.on('interaction', (newTime: number) => {
       const currentTimeSeconds = newTime || wavesurfer!.getCurrentTime();
       currentTime = formatTimeSRT(currentTimeSeconds);
+      timeInput = formatTimestamp(currentTimeSeconds * 1000);
       
       // Update current subtitle when seeking/clicking
       currentSubtitle = findActiveSubtitle(currentTimeSeconds);
@@ -489,6 +492,46 @@
     }
   }
 
+  function seekToTime() {
+    if (!wavesurfer || !isAudioReady) return;
+    
+    try {
+      // Parse the time input in HH:MM:SS.mmm format
+      const timeRegex = /^(\d{1,2}):(\d{2}):(\d{2})\.(\d{3})$/;
+      const match = timeInput.match(timeRegex);
+      
+      if (!match) {
+        alert('Invalid time format. Please use HH:MM:SS.mmm (e.g., 00:01:23.500)');
+        return;
+      }
+      
+      const [, hours, minutes, seconds, milliseconds] = match;
+      const totalSeconds = parseInt(hours) * 3600 + 
+                          parseInt(minutes) * 60 + 
+                          parseInt(seconds) + 
+                          parseInt(milliseconds) / 1000;
+      
+      // Check if time is within audio duration
+      const duration = wavesurfer.getDuration();
+      if (totalSeconds > duration) {
+        alert(`Time exceeds audio duration (${formatTimestamp(duration * 1000)})`);
+        return;
+      }
+      
+      // Seek to the specified time
+      wavesurfer.seekTo(totalSeconds / duration);
+    } catch (error) {
+      console.error('Error seeking to time:', error);
+      alert('Error seeking to specified time');
+    }
+  }
+
+  function handleTimeInputKeydown(event: KeyboardEvent) {
+    if (event.key === 'Enter') {
+      seekToTime();
+    }
+  }
+
   // Watch for changes to audioFile prop
   $: if (audioFile && wavesurfer) {
     loadAudioFile();
@@ -555,6 +598,27 @@
       disabled={!audioFile}
     />
     <span class="zoom-value">{zoomLevel}x</span>
+  </div>
+
+  <!-- Time Navigation -->
+  <div class="time-navigation">
+    <label for="time-input">Jump to time:</label>
+    <input 
+      id="time-input"
+      type="text" 
+      bind:value={timeInput}
+      on:keydown={handleTimeInputKeydown}
+      placeholder="00:00:00.000"
+      class="time-input"
+      disabled={!isAudioReady}
+    />
+    <button 
+      class="seek-btn"
+      on:click={seekToTime}
+      disabled={!isAudioReady}
+    >
+      Go
+    </button>
   </div>
 
   <!-- Sync Mode Controls -->
@@ -872,6 +936,67 @@
     font-family: 'Courier New', monospace;
     font-weight: 500;
     color: #475569;
+  }
+
+  .time-navigation {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 6px;
+    border: 2px solid #e2e8f0;
+  }
+
+  .time-navigation label {
+    font-weight: 500;
+    color: #475569;
+    min-width: 100px;
+  }
+
+  .time-input {
+    font-family: 'Courier New', monospace;
+    font-size: 0.875rem;
+    padding: 0.5rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    background: white;
+    color: #1e293b;
+    width: 150px;
+    text-align: center;
+  }
+
+  .time-input:focus {
+    outline: none;
+    border-color: #4f46e5;
+    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+  }
+
+  .time-input:disabled {
+    background: #f1f5f9;
+    color: #94a3b8;
+    cursor: not-allowed;
+  }
+
+  .seek-btn {
+    padding: 0.5rem 1rem;
+    background: #4f46e5;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .seek-btn:hover:not(:disabled) {
+    background: #4338ca;
+  }
+
+  .seek-btn:disabled {
+    background: #94a3b8;
+    cursor: not-allowed;
   }
 
   .sync-controls {
