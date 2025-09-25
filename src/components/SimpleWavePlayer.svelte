@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import WaveSurfer from 'wavesurfer.js';
+  import Hover from 'wavesurfer.js/dist/plugins/hover.esm.js'
+
 
   export let audioFile: File | null = null;
 
@@ -22,7 +24,18 @@
       barWidth: 2,
       barGap: 1,
       barRadius: 2,
-      fillParent: true
+      fillParent: true,
+      plugins: [
+        Hover.create({
+          lineColor: '#ff0000',
+          lineWidth: 2,
+          labelBackground: '#555',
+          labelColor: '#fff',
+          labelSize: '11px',
+          labelPreferLeft: false,
+          formatTimeCallback: formatTimeSRT,
+        }),
+      ],
     });
 
     // Event listeners
@@ -56,6 +69,16 @@
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = Math.floor(seconds % 60);
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  }
+
+  function formatTimeSRT(seconds: number): string {
+    const totalMs = Math.round(seconds * 1000);
+    const hours = Math.floor(totalMs / 3600000);
+    const minutes = Math.floor((totalMs % 3600000) / 60000);
+    const secs = Math.floor((totalMs % 60000) / 1000);
+    const ms = totalMs % 1000;
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`;
   }
 
   function togglePlayPause() {
