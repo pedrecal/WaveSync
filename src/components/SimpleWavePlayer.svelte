@@ -38,6 +38,18 @@
       ],
     });
 
+    // Keyboard event listener for space bar
+    const handleKeydown = (event: KeyboardEvent) => {
+      // Check if space bar was pressed and we're not in an input field
+      if (event.code === 'Space' && event.target === document.body) {
+        event.preventDefault(); // Prevent page scrolling
+        togglePlayPause();
+      }
+    };
+
+    // Add event listener
+    document.addEventListener('keydown', handleKeydown);
+
     // Event listeners
     wavesurfer.on('play', () => {
       isPlaying = true;
@@ -62,6 +74,8 @@
       if (wavesurfer) {
         wavesurfer.destroy();
       }
+      // Remove keyboard event listener
+      document.removeEventListener('keydown', handleKeydown);
     };
   });
 
@@ -144,21 +158,6 @@
   </div>
 
   <!-- Controls -->
-  <div class="controls">
-    <button 
-      on:click={togglePlayPause} 
-      disabled={!audioFile}
-      class="play-button"
-    >
-      {isPlaying ? '⏸️' : '▶️'}
-    </button>
-    
-    <div class="time-display">
-      <span class="current-time">{currentTime}</span>
-      <span class="separator">/</span>
-      <span class="duration">{duration}</span>
-    </div>
-  </div>
 </div>
 
 <style>
@@ -209,50 +208,6 @@
     min-height: 100px;
     border: 1px solid #e2e8f0;
     width: 100%;
-  }
-
-  .controls {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    margin-top: 1rem;
-  }
-
-  .play-button {
-    width: 50px;
-    height: 50px;
-    border: none;
-    border-radius: 50%;
-    background: #4f46e5;
-    color: white;
-    font-size: 1.2rem;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.2s;
-  }
-
-  .play-button:hover:not(:disabled) {
-    background: #4338ca;
-  }
-
-  .play-button:disabled {
-    background: #cbd5e1;
-    cursor: not-allowed;
-  }
-
-  .time-display {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-family: 'Courier New', monospace;
-    font-size: 1rem;
-    color: #475569;
-  }
-
-  .separator {
-    color: #94a3b8;
   }
 
   .zoom-controls {
