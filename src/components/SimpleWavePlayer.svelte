@@ -654,17 +654,24 @@
   {/if}
 
   <!-- Waveform container -->
+  <!-- svelte-ignore a11y-no-noninteractive-tabindex -->
+  <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
   <div 
     bind:this={waveformContainer} 
     class="waveform"
     class:waveform-selected={isWaveformSelected}
     tabindex="0"
-    role="application"
+    role="button"
     aria-label="Audio waveform - Click to select and use keyboard shortcuts for navigation"
     on:focus={() => isWaveformSelected = true}
     on:blur={() => isWaveformSelected = false}
     on:click={() => waveformContainer?.focus()}
-    on:keydown={() => {}}
+    on:keydown={(e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        waveformContainer?.focus();
+      }
+    }}
   ></div>
   
   <!-- Zoom Controls -->
