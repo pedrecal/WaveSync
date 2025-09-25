@@ -1,16 +1,60 @@
-# Svelte + TS + Vite
+# WaveSync
 
-This template should help get you started developing with Svelte and TypeScript in Vite.
+A web-based tool for synchronizing subtitle files (SRT) with videos that have frame drops or timing issues. WaveSync visualizes audio waveforms alongside subtitles to help identify correct sync points and generate properly synchronized subtitle files.
 
-## Recommended IDE Setup
+## Current Tech Stack
 
-[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode).
+- **Framework:** Svelte 5 with TypeScript
+- **Build Tool:** Vite
+- **Audio Processing:**
+  - WaveSurfer.js for waveform visualization
+  - FFmpeg.wasm for audio extraction and processing
 
-## Need an official Svelte framework?
+## Project Status
 
-Check out [SvelteKit](https://github.com/sveltejs/kit#readme), which is also powered by Vite. Deploy anywhere with its serverless-first approach and adapt to various platforms, with out of the box support for TypeScript, SCSS, and Less, and easily-added support for mdsvex, GraphQL, PostCSS, Tailwind CSS, and more.
+🚧 **Currently in Development** 🚧
 
-## Technical considerations
+### Planned Features
+
+- [ ] SRT file parsing and display
+- [ ] Audio waveform visualization
+- [ ] Sync point management
+- [ ] Real-time subtitle preview
+- [ ] Non-linear timing adjustment
+- [ ] Export of corrected SRT files
+- [ ] Export of sync points JSON for analysis
+
+## Development Setup
+
+```bash
+# Install dependencies
+pnpm install
+
+# Start development server
+pnpm dev
+
+# Build for production
+pnpm build
+
+# Run type checks
+pnpm check
+
+# Lint and format code
+pnpm lint
+pnpm format
+```
+
+## Project Structure
+
+```
+src/
+├── components/     # Svelte components
+├── lib/           # Utilities and shared functionality
+├── stores/        # Svelte stores for state management
+└── types/         # TypeScript type definitions
+```
+
+## Technical Details
 
 **Why use this over SvelteKit?**
 
@@ -39,9 +83,27 @@ HMR state preservation comes with a number of gotchas! It has been disabled by d
 
 If you have state that's important to retain within a component, consider creating an external store which would not be replaced by HMR.
 
-```ts
-// store.ts
-// An extremely simple external store
-import { writable } from 'svelte/store'
-export default writable(0)
-```
+## TODO
+
+1. Core Infrastructure
+   - [x] Project setup with Vite + Svelte + TypeScript
+   - [x] Basic project structure
+   - [ ] SRT parser implementation
+   - [ ] Audio extraction setup with FFmpeg.wasm
+   - [ ] Waveform visualization with WaveSurfer.js
+
+2. User Interface
+   - [ ] Waveform display component
+   - [ ] Subtitle display component
+   - [ ] Sync point selection interface
+   - [ ] Navigation controls
+
+3. Core Functionality
+   - [ ] Audio analysis and visualization
+   - [ ] Subtitle timing adjustment
+   - [ ] Sync point management
+   - [ ] Export functionality
+
+## License
+
+[MIT](LICENSE)
