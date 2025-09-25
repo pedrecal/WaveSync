@@ -26,6 +26,7 @@
   let searchQuery = '';
   let filteredSubtitles: SubtitleEntry[] = [];
   let timeInput = '00:00:00.000';
+  let isWaveformSelected = false;
 
   onMount(() => {
     // Initialize plugins
@@ -55,12 +56,36 @@
       ],
     });
 
-    // Keyboard event listener for space bar
+    // Keyboard event listener for waveform controls
     const handleKeydown = (event: KeyboardEvent) => {
-      // Check if space bar was pressed and we're not in an input field
-      if (event.code === 'Space' && event.target === document.body) {
-        event.preventDefault(); // Prevent page scrolling
-        togglePlayPause();
+      // Waveform-specific controls (only when waveform is selected)
+      if (isWaveformSelected && wavesurfer && isAudioReady) {
+        switch (event.code) {
+          case 'Space':
+            event.preventDefault();
+            togglePlayPause();
+            break;
+            
+          case 'ArrowLeft':
+            event.preventDefault();
+            seekByAmount(-getSeekAmount());
+            break;
+            
+          case 'ArrowRight':
+            event.preventDefault();
+            seekByAmount(getSeekAmount());
+            break;
+            
+          case 'ArrowUp':
+            event.preventDefault();
+            changeZoom(50);
+            break;
+            
+          case 'ArrowDown':
+            event.preventDefault();
+            changeZoom(-50);
+            break;
+        }
       }
     };
 
@@ -88,7 +113,7 @@
     wavesurfer.on('audioprocess', () => {
       const currentTimeSeconds = wavesurfer!.getCurrentTime();
       currentTime = formatTimeSRT(currentTimeSeconds);
-      timeInput = formatTimestamp(currentTimeSeconds * 1000);
+      timeInput = formatTimeWithDots(currentTimeSeconds);
       
       // Update current subtitle based on playback time
       currentSubtitle = findActiveSubtitle(currentTimeSeconds);
@@ -97,7 +122,7 @@
     wavesurfer.on('interaction', (newTime: number) => {
       const currentTimeSeconds = newTime || wavesurfer!.getCurrentTime();
       currentTime = formatTimeSRT(currentTimeSeconds);
-      timeInput = formatTimestamp(currentTimeSeconds * 1000);
+      timeInput = formatTimeWithDots(currentTimeSeconds);
       
       // Update current subtitle when seeking/clicking
       currentSubtitle = findActiveSubtitle(currentTimeSeconds);
@@ -496,8 +521,8 @@
     if (!wavesurfer || !isAudioReady) return;
     
     try {
-      // Parse the time input in HH:MM:SS.mmm format
-      const timeRegex = /^(\d{1,2}):(\d{2}):(\d{2})\.(\d{3})$/;
+      // Parse the time input - handle both . and , as decimal separator
+      const timeRegex = /^(\d{1,2}):(\d{2}):(\d{2})[.,](\d{3})$/;
       const match = timeInput.match(timeRegex);
       
       if (!match) {
@@ -514,7 +539,7 @@
       // Check if time is within audio duration
       const duration = wavesurfer.getDuration();
       if (totalSeconds > duration) {
-        alert(`Time exceeds audio duration (${formatTimestamp(duration * 1000)})`);
+        alert(`Time exceeds audio duration (${formatTimeWithDots(duration)})`);
         return;
       }
       
@@ -530,6 +555,52 @@
     if (event.key === 'Enter') {
       seekToTime();
     }
+  }
+
+  // Format time consistently with dots for input field
+  function formatTimeWithDots(seconds: number): string {
+    const totalMs = seconds * 1000;
+    const hours = Math.floor(totalMs / 3600000);
+    const minutes = Math.floor((totalMs % 3600000) / 60000);
+    const secs = Math.floor((totalMs % 60000) / 1000);
+    const ms = Math.floor(totalMs % 1000);
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
+  }
+
+  // Get seek amount based on zoom level (more zoom = smaller seek steps)
+  function getSeekAmount(): number {
+    if (!wavesurfer) return 1;
+    
+    // At zoom 500, we want 50ms (0.05 seconds) movement
+    // At zoom 100, we want 250ms (0.25 seconds) movement  
+    // At zoom 1, we want 25000ms (25 seconds) movement
+    // Formula: seekAmount = 25 / zoomLevel
+    const seekAmount = Math.max(0.001, 25 / zoomLevel); // Min 1ms
+    return seekAmount;
+  }
+
+  // Seek by a specific amount of seconds
+  function seekByAmount(seconds: number) {
+    if (!wavesurfer || !isAudioReady) return;
+    
+    const currentTime = wavesurfer.getCurrentTime();
+    const duration = wavesurfer.getDuration();
+    const newTime = Math.max(0, Math.min(duration, currentTime + seconds));
+    
+    wavesurfer.seekTo(newTime / duration);
+    
+    // Manually update the time input field for keyboard navigation
+    timeInput = formatTimeWithDots(newTime);
+    
+    // Update current subtitle display
+    currentSubtitle = findActiveSubtitle(newTime);
+  }
+
+  // Change zoom level with keyboard
+  function changeZoom(deltaZoom: number) {
+    const newZoom = Math.max(1, Math.min(500, zoomLevel + deltaZoom));
+    zoomLevel = newZoom;
   }
 
   // Watch for changes to audioFile prop
@@ -583,7 +654,18 @@
   {/if}
 
   <!-- Waveform container -->
-  <div bind:this={waveformContainer} class="waveform"></div>
+  <div 
+    bind:this={waveformContainer} 
+    class="waveform"
+    class:waveform-selected={isWaveformSelected}
+    tabindex="0"
+    role="application"
+    aria-label="Audio waveform - Click to select and use keyboard shortcuts for navigation"
+    on:focus={() => isWaveformSelected = true}
+    on:blur={() => isWaveformSelected = false}
+    on:click={() => waveformContainer?.focus()}
+    on:keydown={() => {}}
+  ></div>
   
   <!-- Zoom Controls -->
   <div class="zoom-controls">
@@ -875,6 +957,19 @@
     min-height: 100px;
     border: 1px solid #e2e8f0;
     width: 100%;
+    transition: all 0.2s ease;
+    cursor: pointer;
+  }
+
+  .waveform:focus {
+    outline: none;
+  }
+
+  .waveform-selected {
+    border-color: #4f46e5;
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2), 
+                0 0 20px rgba(79, 70, 229, 0.3);
+    background: #fefefe;
   }
 
   .zoom-controls {
