@@ -2,6 +2,7 @@
   import FileUpload from './components/FileUpload.svelte';
   import SubtitleDisplay from './components/SubtitleDisplay.svelte';
   import SimpleAudioUpload from './components/SimpleAudioUpload.svelte';
+  import SimpleWavePlayer from './components/SimpleWavePlayer.svelte';
   import type { SubtitleEntry } from './lib/srt-parser';
   
   let selectedAudioFile: File | null = null;
@@ -69,13 +70,7 @@
       </div>
       
       {#if selectedAudioFile}
-        <div class="audio-section">
-          <div class="audio-info">
-            <h3>🎵 Audio File</h3>
-            <p><strong>{selectedAudioFile.name}</strong></p>
-            <p>Ready for waveform visualization</p>
-          </div>
-        </div>
+        <SimpleWavePlayer audioFile={selectedAudioFile} />
       {/if}
     </div>
   {/if}
@@ -123,23 +118,6 @@
     border-radius: 12px;
     border: 1px solid #374151;
     margin-bottom: 2rem;
-  }
-
-  .audio-section {
-    background: #1e293b;
-    padding: 1.5rem;
-    border-radius: 12px;
-    border: 1px solid #334155;
-  }
-
-  .audio-info h3 {
-    margin: 0 0 1rem 0;
-    color: #f59e0b;
-  }
-
-  .audio-info p {
-    margin: 0.5rem 0;
-    color: #d1d5db;
   }
   
   .error-message {
