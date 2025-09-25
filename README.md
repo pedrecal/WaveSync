@@ -7,22 +7,45 @@ A web-based tool for synchronizing subtitle files (SRT) with videos that have fr
 - **Framework:** Svelte 5 with TypeScript
 - **Build Tool:** Vite
 - **Audio Processing:**
-  - WaveSurfer.js for waveform visualization
-  - FFmpeg.wasm for audio extraction and processing
+  - WaveSurfer.js for waveform visualization and interaction
+  - Custom SRT parser with robust time format handling
 
 ## Project Status
 
-🚧 **Currently in Development** 🚧
+✅ **Fully Functional** - Core subtitle synchronization problem solved!
 
-### Planned Features
+### ✅ Implemented Features
 
-- [ ] SRT file parsing and display
-- [ ] Audio waveform visualization
-- [ ] Sync point management
-- [ ] Real-time subtitle preview
-- [ ] Non-linear timing adjustment
-- [ ] Export of corrected SRT files
-- [ ] Export of sync points JSON for analysis
+- [x] SRT file parsing and display
+- [x] Audio waveform visualization with interactive controls
+- [x] Visual subtitle regions overlaid on waveform
+- [x] Click-to-create sync points with real-time feedback
+- [x] Linear interpolation algorithm for timing corrections
+- [x] Real-time subtitle preview with automatic corrections
+- [x] Non-linear timing adjustment via multiple sync points
+- [x] Export of corrected SRT files
+- [x] Keyboard navigation (spacebar, arrows) with zoom-aware seeking
+- [x] Precise time input navigation (HH:MM:SS.mmm format)
+- [x] Visual feedback system with color-coded regions
+- [x] Accessibility compliance with ARIA attributes
+
+## How to Use
+
+1. **Load Audio**: Select an audio file to display the waveform
+2. **Import SRT**: Load your subtitle file - subtitles appear as blue regions on the waveform
+3. **Navigate**: Use playback controls, keyboard (spacebar/arrows), or time input to find misaligned subtitles
+4. **Create Sync Points**: Click on the waveform where a subtitle should actually start - creates a green corrected region
+5. **Automatic Corrections**: All other subtitles update automatically using interpolation
+6. **Export**: Download your corrected SRT file when satisfied with the sync
+
+### Keyboard Controls
+
+- **Spacebar**: Play/pause audio
+- **Left/Right Arrows**: Seek backward/forward (amount scales with zoom level)
+- **Up/Down Arrows**: Zoom in/out
+- **Click waveform**: Focus waveform for keyboard control (yellow glow indicates focus)
+
+The app handles non-linear timing drift by interpolating corrections between your sync points, making it perfect for videos with frame drops or variable timing issues.
 
 ## Development Setup
 
@@ -56,53 +79,68 @@ src/
 
 ## Technical Details
 
-**Why use this over SvelteKit?**
+## Technical Architecture
 
-- It brings its own routing solution which might not be preferable for some users.
-- It is first and foremost a framework that just happens to use Vite under the hood, not a Vite app.
+**Core Algorithm**: Linear interpolation between user-defined sync points
 
-This template contains as little as possible to get started with Vite + TypeScript + Svelte, while taking into account the developer experience with regards to HMR and intellisense. It demonstrates capabilities on par with the other `create-vite` templates and is a good starting point for beginners dipping their toes into a Vite + Svelte project.
+- Single sync point: Apply constant offset to all subtitles
+- Multiple sync points: Interpolate corrections between points
+- Extrapolation: Extend corrections beyond first/last sync point
 
-Should you later need the extended capabilities and extensibility provided by SvelteKit, the template has been structured similarly to SvelteKit so that it is easy to migrate.
+**Key Components:**
 
-**Why `global.d.ts` instead of `compilerOptions.types` inside `jsconfig.json` or `tsconfig.json`?**
+- `SimpleWavePlayer.svelte`: Main waveform component with sync functionality
+- `srt-parser.ts`: Robust SRT file parsing with multiple time format support
+- `SubtitleDisplay.svelte`: Real-time subtitle display above waveform
+- WaveSurfer.js integration with Regions and Hover plugins for interactive waveform
 
-Setting `compilerOptions.types` shuts out all other types not explicitly listed in the configuration. Using triple-slash references keeps the default TypeScript setting of accepting type information from the entire workspace, while also adding `svelte` and `vite/client` type information.
+**Why Svelte over SvelteKit?**
+This is a single-page audio processing tool that doesn't require routing or server-side features. The lighter Vite + Svelte setup provides faster development and simpler deployment for this specific use case.
 
-**Why include `.vscode/extensions.json`?**
+**Accessibility Features:**
 
-Other templates indirectly recommend extensions via the README, but this file allows VS Code to prompt the user to install the recommended extension upon opening the project.
+- Full keyboard navigation support
+- ARIA attributes for screen readers
+- Visual focus indicators
+- Semantic HTML structure
 
-**Why enable `allowJs` in the TS template?**
+## Implementation Status
 
-While `allowJs: false` would indeed prevent the use of `.js` files in the project, it does not prevent the use of JavaScript syntax in `.svelte` files. In addition, it would force `checkJs: false`, bringing the worst of both worlds: not being able to guarantee the entire codebase is TypeScript, and also having worse typechecking for the existing JavaScript. In addition, there are valid use cases in which a mixed codebase may be relevant.
+### ✅ Completed
 
-**Why is HMR not preserving my local component state?**
-
-HMR state preservation comes with a number of gotchas! It has been disabled by default in both `svelte-hmr` and `@sveltejs/vite-plugin-svelte` due to its often surprising behavior. You can read the details [here](https://github.com/rixo/svelte-hmr#svelte-hmr).
-
-If you have state that's important to retain within a component, consider creating an external store which would not be replaced by HMR.
-
-## TODO
-
-1. Core Infrastructure
+1. **Core Infrastructure**
    - [x] Project setup with Vite + Svelte + TypeScript
    - [x] Basic project structure
-   - [ ] SRT parser implementation
-   - [ ] Audio extraction setup with FFmpeg.wasm
-   - [ ] Waveform visualization with WaveSurfer.js
+   - [x] SRT parser implementation with robust time format handling
+   - [x] Waveform visualization with WaveSurfer.js
+   - [x] Interactive regions plugin integration
 
-2. User Interface
-   - [ ] Waveform display component
-   - [ ] Subtitle display component
-   - [ ] Sync point selection interface
-   - [ ] Navigation controls
+2. **User Interface**
+   - [x] Waveform display component with zoom controls
+   - [x] Subtitle display component above waveform
+   - [x] Sync point selection interface (click-to-create)
+   - [x] Navigation controls (playback, keyboard, time input)
+   - [x] Visual feedback system with color-coded regions
+   - [x] Accessible keyboard controls with focus indicators
 
-3. Core Functionality
-   - [ ] Audio analysis and visualization
-   - [ ] Subtitle timing adjustment
-   - [ ] Sync point management
-   - [ ] Export functionality
+3. **Core Functionality**
+   - [x] Audio analysis and visualization
+   - [x] Subtitle timing adjustment with interpolation algorithm
+   - [x] Sync point management with real-time updates
+   - [x] Export functionality for corrected SRT files
+   - [x] Non-linear timing drift correction
+   - [x] Real-time subtitle corrections without manual apply steps
+
+### 🎯 Future Enhancements (Optional)
+
+While the core problem is solved, potential improvements could include:
+
+- Batch processing for multiple files
+- Advanced interpolation algorithms (spline, bezier)
+- Video preview integration
+- Sync point import/export
+- Undo/redo functionality
+- Enhanced UI/UX polish
 
 ## License
 
