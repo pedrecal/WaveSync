@@ -48,10 +48,13 @@ export function parseTimestamp(timestamp: string): number {
 export function formatTimestamp(ms: number): string {
   const pad = (n: number, width: number): string => n.toString().padStart(width, '0');
 
-  const hours = Math.floor(ms / 3600000);
-  const minutes = Math.floor((ms % 3600000) / 60000);
-  const seconds = Math.floor((ms % 60000) / 1000);
-  const milliseconds = ms % 1000;
+  // Ensure ms is non-negative and finite
+  const safeMs = Math.max(0, isFinite(ms) ? Math.floor(ms) : 0);
+
+  const hours = Math.floor(safeMs / 3600000);
+  const minutes = Math.floor((safeMs % 3600000) / 60000);
+  const seconds = Math.floor((safeMs % 60000) / 1000);
+  const milliseconds = safeMs % 1000;
 
   return `${pad(hours, 2)}:${pad(minutes, 2)}:${pad(seconds, 2)},${pad(milliseconds, 3)}`;
 }
@@ -138,6 +141,24 @@ export function parseSRT(content: string): SubtitleEntry[] {
  * Converts subtitle entries back to SRT format
  */
 export function formatSRT(entries: SubtitleEntry[]): string {
+  return entries
+    .map((entry) => {
+      return [
+        entry.id,
+        `${entry.startTime} --> ${entry.endTime}`,
+        ...entry.text,
+        '', // Empty line between entries
+      ].join('\n');
+    })
+    .join('\n');
+}
+
+/**
+ * Converts translated subtitle entries to SRT format
+ */
+export function formatTranslatedSRT(
+  entries: { id: number; startTime: string; endTime: string; text: string[] }[]
+): string {
   return entries
     .map((entry) => {
       return [

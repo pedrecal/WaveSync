@@ -5,6 +5,7 @@
   import Regions from 'wavesurfer.js/dist/plugins/regions.esm.js'
   import type { SubtitleEntry } from '../lib/srt-parser';
   import { parseTimestamp, formatTimestamp, formatSRT } from '../lib/srt-parser';
+  import { correctedSubtitles as correctedSubtitlesStore } from '../stores/sync-store';
 
   export let audioFile: File | null = null;
   export let subtitles: SubtitleEntry[] = [];
@@ -27,6 +28,7 @@
   let filteredSubtitles: SubtitleEntry[] = [];
   let timeInput = '00:00:00.000';
   let isWaveformSelected = false;
+  let searchInputElement: HTMLInputElement;
 
   onMount(() => {
     // Initialize plugins
@@ -84,6 +86,14 @@
           case 'ArrowDown':
             event.preventDefault();
             changeZoom(-50);
+            break;
+            
+          case 'Enter':
+            // Only open sync modal if sync mode is active and modal is not already open
+            if (isSyncMode && !showSubtitleSelector && subtitles && subtitles.length > 0) {
+              event.preventDefault();
+              openSyncPointCreation();
+            }
             break;
         }
       }
@@ -157,8 +167,13 @@
 
   // Convert SRT timestamp (HH:MM:SS,mmm) to seconds for WaveSurfer regions
   function convertSRTTimeToSeconds(srtTimestamp: string): number {
-    const milliseconds = parseTimestamp(srtTimestamp);
-    return milliseconds / 1000;
+    try {
+      const milliseconds = parseTimestamp(srtTimestamp);
+      return milliseconds / 1000;
+    } catch (error) {
+      console.warn(`Invalid timestamp encountered: ${srtTimestamp}, defaulting to 0`);
+      return 0; // Return 0 for invalid timestamps instead of throwing
+    }
   }
 
   // Find the subtitle that should be active at the given time (in seconds)
@@ -263,6 +278,14 @@
     showSubtitleSelector = true;
     searchQuery = '';
     filteredSubtitles = subtitles;
+    
+    // Auto-focus search input after modal is rendered
+    setTimeout(() => {
+      if (searchInputElement) {
+        searchInputElement.focus();
+        searchInputElement.select(); // Also select any existing text
+      }
+    }, 100);
   }
 
   function closeSubtitleSelector() {
@@ -276,16 +299,20 @@
       return;
     }
 
-    const query = searchQuery.toLowerCase();
+    // Remove punctuation and normalize for better searching
+    const normalizeText = (text: string) => 
+      text.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+
+    const normalizedQuery = normalizeText(searchQuery);
     filteredSubtitles = subtitles.filter(subtitle => {
       // Search by ID
-      if (subtitle.id.toString().includes(query)) {
+      if (subtitle.id.toString().includes(searchQuery.toLowerCase())) {
         return true;
       }
       
-      // Search by text content
-      const text = subtitle.text.join(' ').toLowerCase();
-      return text.includes(query);
+      // Search by text content (ignoring punctuation)
+      const normalizedText = normalizeText(subtitle.text.join(' '));
+      return normalizedText.includes(normalizedQuery);
     });
   }
 
@@ -313,6 +340,7 @@
     
     // Auto-recalculate corrections using ORIGINAL subtitles as reference
     correctedSubtitles = applySyncCorrection(subtitles);
+    correctedSubtitlesStore.set(correctedSubtitles); // Update store for translation
     console.log('Auto-updated corrected subtitles');
     
     // Update waveform regions to show corrected timings
@@ -321,6 +349,11 @@
     // Update current subtitle display to use corrected version
     if (wavesurfer) {
       currentSubtitle = findActiveSubtitle(wavesurfer.getCurrentTime());
+    }
+    
+    // Return focus to waveform after creating sync point
+    if (waveformContainer) {
+      waveformContainer.focus();
     }
   }
 
@@ -352,6 +385,7 @@
   function clearSyncPoints() {
     syncPoints = [];
     correctedSubtitles = [];
+    correctedSubtitlesStore.set([]); // Update store for translation
     
     // Clear sync point markers from waveform
     if (regionsPlugin) {
@@ -366,15 +400,135 @@
     }
   }
 
+  function exportSyncPointsJSON() {
+    if (syncPoints.length === 0) {
+      alert('No sync points to export. Create some sync points first.');
+      return;
+    }
+
+    // Create JSON format with SRT timestamps: array of {original, target}
+    const exportData = syncPoints.map(sp => ({
+      original: formatTimeSRT(sp.subtitleTime),
+      target: formatTimeSRT(sp.audioTime)
+    }));
+
+    const jsonContent = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([jsonContent], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'sync-points.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    console.log(`Exported ${syncPoints.length} sync points as JSON`);
+  }
+
+  function importSyncPointsJSON(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    
+    if (!file) {
+      return;
+    }
+    
+    if (!file.name.toLowerCase().endsWith('.json')) {
+      alert('Please select a JSON file.');
+      input.value = '';
+      return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const importedData = JSON.parse(content);
+        
+        if (!Array.isArray(importedData)) {
+          throw new Error('JSON must contain an array of sync points');
+        }
+        
+        // Validate the format: array of {original, target} with SRT timestamps
+        const validSyncPoints = importedData.every(item => 
+          typeof item === 'object' && 
+          typeof item.original === 'string' && 
+          typeof item.target === 'string' &&
+          /^\d{2}:\d{2}:\d{2},\d{3}$/.test(item.original) &&
+          /^\d{2}:\d{2}:\d{2},\d{3}$/.test(item.target)
+        );
+        
+        if (!validSyncPoints) {
+          throw new Error('Invalid format. Expected array of {original: "HH:MM:SS,mmm", target: "HH:MM:SS,mmm"}');
+        }
+        
+        // Clear existing sync points
+        clearSyncPoints();
+        
+        // Convert imported data to internal format (convert SRT timestamps to seconds)
+        syncPoints = importedData.map((item, index) => ({
+          id: `imported_${Date.now()}_${index}`,
+          audioTime: convertSRTTimeToSeconds(item.target),
+          subtitleTime: convertSRTTimeToSeconds(item.original),
+          subtitleId: 0 // Will be updated when we find matching subtitle
+        }));
+        
+        // Try to match with actual subtitles to get proper subtitle IDs
+        syncPoints = syncPoints.map(sp => {
+          // Find the subtitle entry that matches or is closest to this time
+          let closestSubtitle = subtitles[0];
+          let closestDiff = Infinity;
+          
+          subtitles.forEach(subtitle => {
+            const subtitleTime = convertSRTTimeToSeconds(subtitle.startTime);
+            const diff = Math.abs(subtitleTime - sp.subtitleTime);
+            if (diff < closestDiff) {
+              closestDiff = diff;
+              closestSubtitle = subtitle;
+            }
+          });
+          
+          return {
+            ...sp,
+            subtitleId: closestSubtitle?.id || 0
+          };
+        });
+        
+        // Apply sync corrections
+        correctedSubtitles = applySyncCorrection(subtitles);
+        correctedSubtitlesStore.set(correctedSubtitles);
+        
+        // Update waveform regions
+        createSubtitleRegions();
+        
+        console.log(`Imported ${syncPoints.length} sync points from JSON`);
+        alert(`Successfully imported ${syncPoints.length} sync points!`);
+        
+      } catch (error) {
+        console.error('Error importing sync points:', error);
+        alert(`Error importing sync points: ${error instanceof Error ? error.message : 'Unknown error occurred'}`);
+      }
+      
+      // Clear the input
+      input.value = '';
+    };
+    
+    reader.readAsText(file);
+  }
+
   function removeSyncPoint(syncPointId: string) {
     syncPoints = syncPoints.filter(sp => sp.id !== syncPointId);
     
     // Auto-recalculate corrections with remaining sync points
     if (syncPoints.length > 0) {
       correctedSubtitles = applySyncCorrection(subtitles);
+      correctedSubtitlesStore.set(correctedSubtitles); // Update store for translation
     } else {
       // No sync points left, clear corrected subtitles
       correctedSubtitles = [];
+      correctedSubtitlesStore.set([]); // Update store for translation
     }
     
     // Update waveform regions to reflect changes
@@ -444,13 +598,16 @@
       const endTimeSeconds = convertSRTTimeToSeconds(subtitle.endTime);
 
       // Apply interpolation to both start and end times
-      const newStartTime = interpolateTime(startTimeSeconds, sortedSyncPoints);
-      const newEndTime = interpolateTime(endTimeSeconds, sortedSyncPoints);
+      const newStartTime = Math.max(0, interpolateTime(startTimeSeconds, sortedSyncPoints));
+      const newEndTime = Math.max(0, interpolateTime(endTimeSeconds, sortedSyncPoints));
+
+      // Ensure end time is always after start time
+      const adjustedEndTime = Math.max(newEndTime, newStartTime + 0.1); // Minimum 100ms duration
 
       return {
         ...subtitle,
         startTime: formatTimestamp(Math.round(newStartTime * 1000)),
-        endTime: formatTimestamp(Math.round(newEndTime * 1000))
+        endTime: formatTimestamp(Math.round(adjustedEndTime * 1000))
       };
     });
   }
@@ -462,10 +619,11 @@
         const point1 = sortedSyncPoints[0];
         const point2 = sortedSyncPoints[1];
         const slope = (point2.audioTime - point1.audioTime) / (point2.subtitleTime - point1.subtitleTime);
-        return point1.audioTime + slope * (originalTime - point1.subtitleTime);
+        const extrapolatedTime = point1.audioTime + slope * (originalTime - point1.subtitleTime);
+        return Math.max(0, extrapolatedTime); // Ensure never negative
       } else {
         const offset = sortedSyncPoints[0].audioTime - sortedSyncPoints[0].subtitleTime;
-        return originalTime + offset;
+        return Math.max(0, originalTime + offset); // Ensure never negative
       }
     }
 
@@ -475,10 +633,11 @@
         const point1 = sortedSyncPoints[sortedSyncPoints.length - 2];
         const point2 = sortedSyncPoints[sortedSyncPoints.length - 1];
         const slope = (point2.audioTime - point1.audioTime) / (point2.subtitleTime - point1.subtitleTime);
-        return point2.audioTime + slope * (originalTime - point2.subtitleTime);
+        const extrapolatedTime = point2.audioTime + slope * (originalTime - point2.subtitleTime);
+        return Math.max(0, extrapolatedTime); // Ensure never negative
       } else {
         const offset = sortedSyncPoints[0].audioTime - sortedSyncPoints[0].subtitleTime;
-        return originalTime + offset;
+        return Math.max(0, originalTime + offset); // Ensure never negative
       }
     }
 
@@ -545,6 +704,11 @@
       
       // Seek to the specified time
       wavesurfer.seekTo(totalSeconds / duration);
+      
+      // Focus waveform after successful time jump
+      if (waveformContainer) {
+        waveformContainer.focus();
+      }
     } catch (error) {
       console.error('Error seeking to time:', error);
       alert('Error seeking to specified time');
@@ -653,6 +817,48 @@
     </div>
   {/if}
 
+  <!-- Sync Mode Controls (moved above waveform) -->
+  {#if subtitles && subtitles.length > 0 && isAudioReady}
+    <div class="sync-controls">
+      <button 
+        class="sync-toggle {isSyncMode ? 'active' : ''}"
+        on:click={toggleSyncMode}
+      >
+        {isSyncMode ? '🎯 Exit Sync Mode' : '🎯 Enter Sync Mode'}
+      </button>
+      
+      {#if isSyncMode}
+        <div class="sync-instructions">
+          <p><strong>🎯 Sync Workflow:</strong></p>
+          <p>1️⃣ Navigate to where a subtitle should be (click/play waveform)</p>
+          <p>2️⃣ Click "Create Sync Point" button below</p>
+          <p>3️⃣ Search and select which subtitle belongs at this timing</p>
+          <p><em>💡 Tip: Start with first and last subtitles for best results</em></p>
+        </div>
+        
+        <div class="sync-current-position">
+          <div class="position-info">
+            <span class="current-time-display">Current Time: <strong>{currentTime}</strong></span>
+            <span class="current-subtitle-display">
+              {#if currentSubtitle}
+                Playing: <strong>#{currentSubtitle.id}</strong> - {currentSubtitle.text.join(' ').substring(0, 60)}...
+              {:else}
+                <em>No subtitle at current time</em>
+              {/if}
+            </span>
+          </div>
+          <button 
+            class="create-sync-btn"
+            on:click={openSyncPointCreation}
+            disabled={!isAudioReady}
+          >
+            🎯 Create Sync Point Here
+          </button>
+        </div>
+      {/if}
+    </div>
+  {/if}
+
   <!-- Waveform container -->
   <!-- svelte-ignore a11y-no-noninteractive-tabindex -->
   <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
@@ -710,71 +916,29 @@
     </button>
   </div>
 
-  <!-- Sync Mode Controls -->
-  {#if subtitles && subtitles.length > 0 && isAudioReady}
-    <div class="sync-controls">
-      <button 
-        class="sync-toggle {isSyncMode ? 'active' : ''}"
-        on:click={toggleSyncMode}
-      >
-        {isSyncMode ? '🎯 Exit Sync Mode' : '🎯 Enter Sync Mode'}
-      </button>
-      
-      {#if isSyncMode}
-        <div class="sync-instructions">
-          <p><strong>🎯 Sync Workflow:</strong></p>
-          <p>1️⃣ Navigate to where a subtitle should be (click/play waveform)</p>
-          <p>2️⃣ Click "Create Sync Point" button below</p>
-          <p>3️⃣ Search and select which subtitle belongs at this timing</p>
-          <p><em>💡 Tip: Start with first and last subtitles for best results</em></p>
-        </div>
-        
-        <div class="sync-current-position">
-          <div class="position-info">
-            <span class="current-time-display">Current Time: <strong>{currentTime}</strong></span>
-            <span class="current-subtitle-display">
-              {#if currentSubtitle}
-                Playing: <strong>#{currentSubtitle.id}</strong> - {currentSubtitle.text.join(' ').substring(0, 60)}...
-              {:else}
-                <em>No subtitle at current time</em>
-              {/if}
-            </span>
-          </div>
-          <button 
-            class="create-sync-btn"
-            on:click={openSyncPointCreation}
-            disabled={!isAudioReady}
-          >
-            🎯 Create Sync Point Here
-          </button>
-        </div>
-      {/if}
-      
-      {#if syncPoints.length > 0}
-        <div class="sync-points-summary">
-          <span class="sync-count">{syncPoints.length} sync point{syncPoints.length === 1 ? '' : 's'} • Subtitles auto-corrected</span>
-          <button class="download-sync-btn" on:click={downloadCorrectedSRT}>📥 Download Corrected SRT</button>
-          <button class="clear-sync-btn" on:click={clearSyncPoints}>Clear All</button>
-        </div>
-        
-        <div class="correction-info">
-          <p><strong>� Live Corrections:</strong> 
-            {#if syncPoints.length === 1}
-              Simple offset applied: {Math.round((syncPoints[0].audioTime - syncPoints[0].subtitleTime) * 1000)}ms
-            {:else if syncPoints.length > 1}
-              Interpolated timing from {syncPoints.length} sync points
-            {/if}
-          </p>
-          <p><em>Subtitle display now shows corrected timings. Add more sync points to improve accuracy.</em></p>
-        </div>
-      {/if}
+  <!-- Sync Points Summary -->
+  {#if syncPoints.length > 0}
+    <div class="sync-points-summary">
+      <span class="sync-count">{syncPoints.length} sync point{syncPoints.length === 1 ? '' : 's'} • Subtitles auto-corrected</span>
+      <button class="download-sync-btn" on:click={downloadCorrectedSRT}>📥 Download Corrected SRT</button>
+      <button class="clear-sync-btn" on:click={clearSyncPoints}>Clear All</button>
     </div>
   {/if}
 
   <!-- Sync Points Management Panel -->
   {#if syncPoints.length > 0}
     <div class="sync-points-panel">
-      <h4>🎯 Sync Points</h4>
+      <div class="sync-points-header">
+        <h4>🎯 Sync Points</h4>
+        <div class="correction-info-inline">
+          <strong>⚡ Live Corrections:</strong> 
+          {#if syncPoints.length === 1}
+            Simple offset applied: {Math.round((syncPoints[0].audioTime - syncPoints[0].subtitleTime) * 1000)}ms
+          {:else if syncPoints.length > 1}
+            Interpolated timing from {syncPoints.length} sync points
+          {/if}
+        </div>
+      </div>
       <div class="sync-points-list">
         {#each syncPoints as syncPoint (syncPoint.id)}
           <div class="sync-point-item">
@@ -800,6 +964,17 @@
           </div>
         {/each}
       </div>
+      
+      <!-- Export/Import Actions -->
+      <div class="sync-actions">
+        <button class="export-json-btn" on:click={exportSyncPointsJSON} title="Export sync points as JSON">
+          📄 Export JSON
+        </button>
+        <label class="import-json-btn" title="Import sync points from JSON">
+          📁 Import JSON
+          <input type="file" accept=".json" on:change={importSyncPointsJSON} style="display: none;">
+        </label>
+      </div>
     </div>
   {/if}
 
@@ -818,6 +993,7 @@
         
         <div class="search-section">
           <input 
+            bind:this={searchInputElement}
             type="text" 
             placeholder="Search subtitles by text or ID..."
             bind:value={searchQuery}
@@ -1200,18 +1376,49 @@
     background: #047857;
   }
 
-  .correction-info {
+  .sync-actions {
     margin-top: 1rem;
-    padding: 1rem;
-    background: #ecfdf5;
-    border: 2px solid #10b981;
-    border-radius: 6px;
+    padding-top: 1rem;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
   }
 
-  .correction-info p {
-    margin: 0.25rem 0;
-    color: #065f46;
+  .export-json-btn {
+    padding: 0.5rem 1rem;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    font-size: 0.875rem;
   }
+
+  .export-json-btn:hover {
+    background: #2563eb;
+  }
+
+  .import-json-btn {
+    padding: 0.5rem 1rem;
+    background: #059669;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    font-size: 0.875rem;
+    display: inline-block;
+  }
+
+  .import-json-btn:hover {
+    background: #047857;
+  }
+
+
 
   .sync-current-position {
     margin-top: 1rem;
@@ -1273,10 +1480,28 @@
     border-radius: 8px;
   }
 
+  .sync-points-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
   .sync-points-panel h4 {
-    margin: 0 0 1rem 0;
+    margin: 0;
     color: #065f46;
     font-size: 1.1rem;
+  }
+
+  .correction-info-inline {
+    font-size: 0.875rem;
+    color: #059669;
+    background: #ecfdf5;
+    padding: 0.5rem;
+    border-radius: 4px;
+    border: 1px solid #10b981;
   }
 
   .sync-points-list {
@@ -1496,7 +1721,7 @@
     padding: 2px 4px;
     font-size: 10px;
     font-weight: 500;
-    color: #1f2937;
+    color: #000000;
     background: rgba(255, 255, 255, 0.9);
     border-radius: 2px;
     white-space: nowrap;
