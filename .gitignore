@@ -23,5 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 
+release/
+
 # Private development files
 local_docs

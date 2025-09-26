@@ -1,11 +1,19 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import WaveSurfer from 'wavesurfer.js';
   import Hover from 'wavesurfer.js/dist/plugins/hover.esm.js'
   import Regions from 'wavesurfer.js/dist/plugins/regions.esm.js'
   import type { SubtitleEntry } from '../lib/srt-parser';
+  import type { SyncPoint } from '../types/subtitle';
   import { parseTimestamp, formatTimestamp, formatSRT } from '../lib/srt-parser';
-  import { correctedSubtitles as correctedSubtitlesStore } from '../stores/sync-store';
+  import { 
+    correctedSubtitles as correctedSubtitlesStore,
+    subtitles as subtitlesStore,
+    syncPoints as syncPointsStore,
+    autosaveMetadata,
+    clearAutosaveData 
+  } from '../stores/sync-store';
+  import { get } from 'svelte/store';
 
   export let audioFile: File | null = null;
   export let subtitles: SubtitleEntry[] = [];
@@ -20,7 +28,7 @@
   let isAudioReady = false;
   let currentSubtitle: SubtitleEntry | null = null;
   let isSyncMode = false;
-  let syncPoints: Array<{id: string, audioTime: number, subtitleTime: number, subtitleId: number}> = [];
+  let syncPoints: SyncPoint[] = [];
   let correctedSubtitles: SubtitleEntry[] = [];
   let showSubtitleSelector = false;
   let selectedAudioTime = 0;
@@ -29,8 +37,18 @@
   let timeInput = '00:00:00.000';
   let isWaveformSelected = false;
   let searchInputElement: HTMLInputElement;
+  
+  // Autosave functionality
+  let autosaveIntervalId: number;
+  let hasAutoSavedData = false;
+  let lastSavedTimestamp: string = '';
+  let showSavedNotification = false;
+  let savedNotificationTimeout: number;
 
   onMount(() => {
+    // Check for autosaved data
+    checkForAutosavedData();
+    
     // Initialize plugins
     regionsPlugin = Regions.create();
     
@@ -140,12 +158,24 @@
       // No automatic modal in sync mode - user will click button manually
     });
 
+    // Set up autosave interval (every 30 seconds)
+    setupAutosave();
+    
     return () => {
       if (wavesurfer) {
         wavesurfer.destroy();
       }
       // Remove keyboard event listener
       document.removeEventListener('keydown', handleKeydown);
+      
+      // Clear autosave interval on component destroy
+      if (autosaveIntervalId) {
+        clearInterval(autosaveIntervalId);
+      }
+      // Clear any pending notification timeouts
+      if (savedNotificationTimeout) {
+        clearTimeout(savedNotificationTimeout);
+      }
     };
   });
 
@@ -163,6 +193,106 @@
     const ms = totalMs % 1000;
     
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`;
+  }
+  
+  // Autosave functionality
+  function setupAutosave() {
+    // Set up autosave interval (every 30 seconds)
+    autosaveIntervalId = setInterval(() => {
+      if (syncPoints.length > 0 && audioFile && subtitles.length > 0) {
+        saveCurrentState();
+      }
+    }, 30000); // 30 seconds
+  }
+  
+  function saveCurrentState() {
+    // Update the stores - this triggers the persistent store functionality
+    syncPointsStore.set(syncPoints);
+    subtitlesStore.set(subtitles);
+    correctedSubtitlesStore.set(correctedSubtitles);
+    
+    // Update metadata
+    const now = new Date();
+    autosaveMetadata.set({
+      timestamp: now.getTime(),
+      audioFilename: audioFile?.name || null,
+      srtFilename: subtitles.length > 0 ? `subtitles_${subtitles.length}_entries.srt` : null,
+      syncPointsCount: syncPoints.length
+    });
+    
+    // Format timestamp for display
+    lastSavedTimestamp = now.toLocaleTimeString();
+    
+    // Show saved notification
+    showSavedNotification = true;
+    
+    // Clear previous timeout if exists
+    if (savedNotificationTimeout) {
+      clearTimeout(savedNotificationTimeout);
+    }
+    
+    // Hide notification after 3 seconds
+    savedNotificationTimeout = setTimeout(() => {
+      showSavedNotification = false;
+    }, 3000);
+  }
+  
+  function checkForAutosavedData() {
+    const metadata = get(autosaveMetadata);
+    const savedSyncPoints = get(syncPointsStore);
+    const savedSubtitles = get(subtitlesStore);
+    
+    // Check if we have valid saved data
+    if (
+      metadata.timestamp > 0 && 
+      metadata.syncPointsCount > 0 && 
+      savedSyncPoints.length > 0 && 
+      savedSubtitles.length > 0
+    ) {
+      hasAutoSavedData = true;
+    }
+  }
+  
+  function recoverAutoSavedData() {
+    // Load data from stores
+    const savedSyncPoints = get(syncPointsStore);
+    const savedSubtitles = get(subtitlesStore);
+    const savedCorrectedSubtitles = get(correctedSubtitlesStore);
+    
+    // Apply saved data
+    syncPoints = savedSyncPoints;
+    subtitles = savedSubtitles;
+    correctedSubtitles = savedCorrectedSubtitles.length > 0 ? savedCorrectedSubtitles : applySyncCorrection(savedSubtitles);
+    
+    // Update regions
+    createSubtitleRegions();
+    
+    // Create visual markers for sync points
+    if (regionsPlugin) {
+      syncPoints.forEach(sp => {
+        regionsPlugin.addRegion({
+          start: sp.audioTime,
+          end: sp.audioTime + 0.1,
+          color: '#ff0000aa',
+          content: `🎯 Sync #${sp.subtitleId}`,
+          drag: false,
+          resize: false
+        });
+      });
+    }
+    
+    // Hide recovery section
+    hasAutoSavedData = false;
+    
+    // Show success message
+    alert(`Successfully recovered ${syncPoints.length} sync points and ${subtitles.length} subtitles!`);
+  }
+  
+  function clearSavedData() {
+    if (confirm('Are you sure you want to delete all saved progress? This action cannot be undone.')) {
+      clearAutosaveData();
+      hasAutoSavedData = false;
+    }
   }
 
   // Convert SRT timestamp (HH:MM:SS,mmm) to seconds for WaveSurfer regions
@@ -345,6 +475,9 @@
     
     // Update waveform regions to show corrected timings
     createSubtitleRegions();
+    
+    // Save current state immediately after adding a sync point
+    saveCurrentState();
     
     // Update current subtitle display to use corrected version
     if (wavesurfer) {
@@ -538,6 +671,9 @@
     if (wavesurfer) {
       currentSubtitle = findActiveSubtitle(wavesurfer.getCurrentTime());
     }
+    
+    // Save current state immediately after removing a sync point
+    saveCurrentState();
     
     // Remove the corresponding visual marker
     if (regionsPlugin) {
@@ -806,7 +942,29 @@
 </script>
 
 <div class="wave-player">
+
+
   <h3>WaveSurfer Player</h3>
+  
+  <!-- Simple recovery button -->
+  {#if hasAutoSavedData}
+    <div class="recovery-section">
+      <p>Found previous work with {get(autosaveMetadata).syncPointsCount} sync points from {new Date(get(autosaveMetadata).timestamp).toLocaleString()}</p>
+      <button class="recovery-button" on:click={recoverAutoSavedData}>
+        🔄 Recover Previous Work
+      </button>
+      <button class="clear-button" on:click={clearSavedData}>
+        🗑️ Clear Saved Data
+      </button>
+    </div>
+  {/if}
+  
+  <!-- Autosave status -->
+  {#if showSavedNotification}
+    <div class="autosave-status">
+      ✅ Auto-saved at {lastSavedTimestamp}
+    </div>
+  {/if}
   
   {#if !audioFile}
     <div class="no-file">
@@ -1723,6 +1881,67 @@
     color: #6b7280;
     font-style: italic;
   }
+  
+  /* Recovery section styles */
+  .recovery-section {
+    background-color: #eef2ff;
+    border: 1px solid #c7d2fe;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+  
+  .recovery-section p {
+    margin: 0 0 0.75rem 0;
+    color: #4338ca;
+    font-weight: 500;
+  }
+  
+  .recovery-button, .clear-button {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    margin-right: 0.5rem;
+    transition: all 0.2s;
+  }
+  
+  .recovery-button {
+    background-color: #4f46e5;
+    color: white;
+  }
+  
+  .recovery-button:hover {
+    background-color: #4338ca;
+  }
+  
+  .clear-button {
+    background-color: #fee2e2;
+    color: #b91c1c;
+  }
+  
+  .clear-button:hover {
+    background-color: #fecaca;
+  }
+  
+  /* Autosave status */
+  .autosave-status {
+    background-color: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 1rem;
+    color: #065f46;
+    font-size: 0.875rem;
+    animation: fadeOut 3s ease-in-out forwards;
+  }
+  
+  @keyframes fadeOut {
+    0% { opacity: 1; }
+    70% { opacity: 1; }
+    100% { opacity: 0; }
+  }
 
   /* Global styles for WaveSurfer regions */
   :global(.wavesurfer-region) {
@@ -1756,4 +1975,6 @@
   :global(.wavesurfer-region-content:empty) {
     display: none;
   }
+  
+
 </style>

@@ -1,13 +1,15 @@
 # WaveSync
 
-A web-based tool for synchronizing subtitle files (SRT) with videos that have frame drops or timing issues. WaveSync visualizes audio waveforms alongside subtitles to help identify correct sync points and generate properly synchronized subtitle files.
+A desktop application for synchronizing subtitle files (SRT) with videos that have frame drops or timing issues. WaveSync automatically extracts audio from video files and provides a professional waveform interface to create precise sync points for subtitle correction.
 
 ## Current Tech Stack
 
 - **Framework:** Svelte 5 with TypeScript
+- **Desktop Platform:** Electron with native system integration
 - **Build Tool:** Vite
 - **Audio Processing:**
-  - WaveSurfer.js for waveform visualization and interaction
+  - Native FFmpeg for video-to-audio extraction
+  - WaveSurfer.js for professional waveform visualization
   - Custom SRT parser with robust time format handling
 
 ## Project Status
@@ -16,27 +18,63 @@ A web-based tool for synchronizing subtitle files (SRT) with videos that have fr
 
 ### ✅ Implemented Features
 
-- [x] SRT file parsing and display
-- [x] Audio waveform visualization with interactive controls
-- [x] Visual subtitle regions overlaid on waveform
+**Desktop Integration:**
+
+- [x] Native video file selection with system file dialogs
+- [x] Automatic audio extraction from video files using FFmpeg
+- [x] Progress tracking for video processing operations
+- [x] Auto-detection and loading of companion subtitle files
+- [x] Cross-platform compatibility (macOS, Windows, Linux)
+
+**Professional Waveform Interface:**
+
+- [x] High-quality audio waveform visualization
+- [x] Advanced zoom controls (1x to 500x) with smooth navigation
+- [x] SRT-formatted hover timestamps (HH:MM:SS,mmm)
+- [x] Keyboard navigation with spacebar play/pause
+- [x] Interactive subtitle regions overlaid on waveform
+
+**Subtitle Synchronization:**
+
 - [x] Click-to-create sync points with real-time feedback
-- [x] Linear interpolation algorithm for timing corrections
-- [x] Real-time subtitle preview with automatic corrections
+- [x] Advanced interpolation algorithm for timing corrections
 - [x] Non-linear timing adjustment via multiple sync points
-- [x] Export of corrected SRT files
-- [x] Keyboard navigation (spacebar, arrows) with zoom-aware seeking
-- [x] Precise time input navigation (HH:MM:SS.mmm format)
-- [x] Visual feedback system with color-coded regions
-- [x] Accessibility compliance with ARIA attributes
+- [x] Real-time preview of all subtitle corrections
+- [x] Visual sync point markers on waveform
+
+**File Management:**
+
+- [x] SRT file parsing with comprehensive validation
+- [x] Export corrected SRT files with native save dialogs
+- [x] Import/export sync points as JSON for analysis
+- [x] Autosave system with automatic recovery
+
+**Translation Support:**
+
+- [x] Integrated OpenAI translation service
+- [x] Batch subtitle translation with progress tracking
+- [x] Side-by-side original and translated subtitle display
 
 ## How to Use
 
-1. **Load Audio**: Select an audio file to display the waveform
-2. **Import SRT**: Load your subtitle file - subtitles appear as blue regions on the waveform
-3. **Navigate**: Use playback controls, keyboard (spacebar/arrows), or time input to find misaligned subtitles
-4. **Create Sync Points**: Click on the waveform where a subtitle should actually start - creates a green corrected region
-5. **Automatic Corrections**: All other subtitles update automatically using interpolation
-6. **Export**: Download your corrected SRT file when satisfied with the sync
+### Quick Start Workflow
+
+1. **Select Video**: Click "Select Video File" to choose your video - audio is automatically extracted with progress tracking
+2. **Auto-Load Subtitles**: If a matching SRT file exists in the same directory, it's automatically loaded
+3. **Visual Sync**: Subtitles appear as colored regions on the professional waveform display
+4. **Create Sync Points**:
+   - Enter "Sync Mode" to start creating correction points
+   - Navigate to where a subtitle should actually start
+   - Click "Create Sync Point" and select the correct subtitle from the searchable list
+5. **Real-Time Corrections**: All subtitles update automatically using advanced interpolation
+6. **Export Results**: Save your corrected SRT file using the native file dialog
+
+### Advanced Features
+
+- **Autosave**: Your work is automatically saved every 30 seconds - recovery prompt appears if previous work is detected
+- **Translation**: Translate subtitles to different languages using the integrated translation service
+- **Batch Operations**: Import/export sync points as JSON for analysis or sharing
+- **Professional Navigation**: Zoom up to 500x for frame-accurate subtitle placement
 
 ### Keyboard Controls
 
@@ -49,22 +87,49 @@ The app handles non-linear timing drift by interpolating corrections between you
 
 ## Development Setup
 
+### Prerequisites
+
+- Node.js (18+ recommended)
+- pnpm package manager
+- FFmpeg installed system-wide (for Electron main process)
+
+### Getting Started
+
 ```bash
 # Install dependencies
 pnpm install
 
-# Start development server
-pnpm dev
+# Development with hot reload
+pnpm dev          # Start Vite dev server
+pnpm electron:dev # Start Electron with dev server (in separate terminal)
 
-# Build for production
-pnpm build
+# Production builds
+pnpm build           # Build web assets
+pnpm electron:build  # Build Electron app
+pnpm electron:package # Package for distribution
 
-# Run type checks
-pnpm check
+# Development utilities
+pnpm check    # TypeScript type checking
+pnpm lint     # ESLint code analysis
+pnpm format   # Prettier code formatting
+pnpm test     # Run test suite
 
-# Lint and format code
-pnpm lint
-pnpm format
+# Electron-specific commands
+pnpm electron:start # Start Electron app directly
+```
+
+### Project Structure
+
+```
+├── electron/           # Electron main and preload processes
+│   ├── main.cjs       # Main process (FFmpeg integration)
+│   └── preload.cjs    # Preload script (secure IPC)
+├── src/
+│   ├── components/    # Svelte UI components
+│   ├── lib/          # Utilities and services
+│   ├── stores/       # State management with autosave
+│   └── types/        # TypeScript definitions
+└── test/             # Test files and samples
 ```
 
 ## Project Structure
@@ -94,53 +159,65 @@ src/
 - `SubtitleDisplay.svelte`: Real-time subtitle display above waveform
 - WaveSurfer.js integration with Regions and Hover plugins for interactive waveform
 
-**Why Svelte over SvelteKit?**
-This is a single-page audio processing tool that doesn't require routing or server-side features. The lighter Vite + Svelte setup provides faster development and simpler deployment for this specific use case.
+### Architecture Highlights
 
-**Accessibility Features:**
+**Native Desktop Integration:**
 
-- Full keyboard navigation support
-- ARIA attributes for screen readers
-- Visual focus indicators
-- Semantic HTML structure
+- Electron provides access to native file systems and FFmpeg
+- Secure IPC communication between renderer and main processes
+- Cross-platform native file dialogs and system integration
 
-## Implementation Status
+**Why Svelte + Electron:**
 
-### ✅ Completed
+- Svelte provides excellent performance for real-time waveform manipulation
+- Electron enables native video processing without browser limitations
+- TypeScript ensures type safety across the entire application stack
 
-1. **Core Infrastructure**
-   - [x] Project setup with Vite + Svelte + TypeScript
-   - [x] Basic project structure
-   - [x] SRT parser implementation with robust time format handling
-   - [x] Waveform visualization with WaveSurfer.js
-   - [x] Interactive regions plugin integration
+**Advanced Interpolation Algorithm:**
 
-2. **User Interface**
-   - [x] Waveform display component with zoom controls
-   - [x] Subtitle display component above waveform
-   - [x] Sync point selection interface (click-to-create)
-   - [x] Navigation controls (playback, keyboard, time input)
-   - [x] Visual feedback system with color-coded regions
-   - [x] Accessible keyboard controls with focus indicators
+- Handles single sync points with constant offset correction
+- Multiple sync points use linear interpolation between points
+- Extrapolation extends corrections beyond first/last sync points
+- Real-time preview of all timing adjustments
 
-3. **Core Functionality**
-   - [x] Audio analysis and visualization
-   - [x] Subtitle timing adjustment with interpolation algorithm
-   - [x] Sync point management with real-time updates
-   - [x] Export functionality for corrected SRT files
-   - [x] Non-linear timing drift correction
-   - [x] Real-time subtitle corrections without manual apply steps
+## Key Features
 
-### 🎯 Future Enhancements (Optional)
+### Professional Workflow
 
-While the core problem is solved, potential improvements could include:
+- **Streamlined Video Processing**: One-click audio extraction from any video format
+- **Intelligent File Detection**: Automatically finds and loads companion subtitle files
+- **Visual Feedback**: Color-coded subtitle regions show original vs. corrected timings
+- **Non-Destructive Editing**: Original files remain untouched, corrections applied on export
 
-- Batch processing for multiple files
-- Advanced interpolation algorithms (spline, bezier)
-- Video preview integration
-- Sync point import/export
-- Undo/redo functionality
-- Enhanced UI/UX polish
+### Reliability & Recovery
+
+- **Autosave System**: Automatic saving every 30 seconds prevents work loss
+- **Recovery Notifications**: Simple recovery button when previous work is detected
+- **Progress Tracking**: Real-time progress for long video processing operations
+- **Error Handling**: Comprehensive error handling with user-friendly messages
+
+### Accessibility & Usability
+
+- Full keyboard navigation support with visual focus indicators
+- Professional zoom controls for frame-accurate subtitle placement
+- Searchable subtitle interface for quick navigation
+- Cross-platform compatibility (macOS, Windows, Linux)
+
+## Supported Formats
+
+- **Video Input**: MP4, MKV, AVI, MOV, WebM (any format supported by FFmpeg)
+- **Audio Output**: MP3 (extracted automatically to system temp directory)
+- **Subtitle Formats**: SRT (SubRip) with comprehensive validation
+- **Export Formats**: Corrected SRT files, sync points JSON
+
+## Future Enhancements
+
+- Advanced interpolation algorithms (cubic spline, Bézier curves)
+- Video preview integration alongside waveform
+- Batch processing for multiple subtitle files
+- Additional subtitle formats (VTT, ASS/SSA)
+- Undo/redo system for sync operations
+- Custom keyboard shortcuts and workspace presets
 
 ## License
 

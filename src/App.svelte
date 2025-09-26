@@ -6,6 +6,7 @@
   import VideoSelector from './components/VideoSelector.svelte';
   import type { SubtitleEntry } from './lib/srt-parser';
   import { FileUtils } from './lib/file-service';
+  import { subtitles as subtitlesStore } from './stores/sync-store';
   
   let selectedAudioFile: File | null = null;
   let selectedSRTFile: File | null = null;
@@ -34,6 +35,11 @@
   function handleSubtitlesParsed(event: CustomEvent<{ entries: SubtitleEntry[] }>) {
     parsedSubtitles = event.detail.entries;
     console.log('Subtitles parsed:', parsedSubtitles.length, 'entries');
+    
+    // Update the subtitles store for autosave
+    if (parsedSubtitles.length > 0) {
+      subtitlesStore.set(parsedSubtitles);
+    }
   }
   
   function handleAudioUploaded(event: CustomEvent<{ file: File }>) {

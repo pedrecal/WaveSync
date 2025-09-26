@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const isDev = require('electron-is-dev');
+const isDev = process.env.NODE_ENV === 'development' ? require('electron-is-dev') : false;
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegStatic = require('ffmpeg-static');
 

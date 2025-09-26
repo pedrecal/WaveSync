@@ -6,8 +6,10 @@ export interface SubtitleEntry {
 }
 
 export interface SyncPoint {
-  original: string;
-  target: string;
+  id: string;
+  audioTime: number;
+  subtitleTime: number;
+  subtitleId: number;
 }
 
 export interface SyncMetadata {
