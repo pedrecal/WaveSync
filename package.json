@@ -20,7 +20,7 @@
     "test": "vitest",
     "test:watch": "vitest watch",
     "electron:dev": "concurrently \"ELECTRON=true vite\" \"wait-on http://localhost:5173 && electron electron/main.cjs\"",
-    "electron:build": "npm run build",
+    "electron:build": "ELECTRON=true npm run build",
     "electron:package": "npm run electron:build && electron-builder",
     "electron:start": "electron electron/main.cjs"
   },

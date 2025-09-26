@@ -89,7 +89,10 @@ function createWindow() {
     mainWindow.webContents.openDevTools();
   } else {
     // Load the index.html file in production
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    // In packaged app, dist is at the root level alongside electron folder
+    const indexPath = path.join(__dirname, '../dist/index.html');
+    console.log('Loading index.html from:', indexPath);
+    mainWindow.loadFile(indexPath);
   }
 
   // Handle window closed
