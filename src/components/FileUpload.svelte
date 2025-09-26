@@ -1,6 +1,8 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { WebFileService, FileUtils } from '../lib/file-service';
+  import { getFileService, FileUtils } from '../lib/file-service';
+  
+  export let disabled = false;
   
   const dispatch = createEventDispatcher<{
     audioSelected: { file: File };
@@ -13,7 +15,7 @@
   let selectedAudioFile: File | null = null;
   let selectedSRTFile: File | null = null;
   
-  const fileService = new WebFileService();
+  const fileService = getFileService();
   
   // Drag and drop handlers
   function handleDragOver(event: DragEvent) {
@@ -123,11 +125,12 @@
     class="drop-zone"
     class:drag-over={isDragOver}
     class:processing={isProcessing}
-    on:dragover={handleDragOver}
-    on:dragleave={handleDragLeave}
-    on:drop={handleDrop}
+    class:disabled={disabled}
+    on:dragover={disabled ? null : handleDragOver}
+    on:dragleave={disabled ? null : handleDragLeave}
+    on:drop={disabled ? null : handleDrop}
     role="button"
-    tabindex="0"
+    tabindex={disabled ? -1 : 0}
   >
     {#if isProcessing}
       <div class="processing">
@@ -141,10 +144,20 @@
         <p>Drag & drop audio files (.mp3, .wav, etc.) and SRT subtitles</p>
         <p class="or">or</p>
         <div class="button-group">
-          <button type="button" on:click={selectAudioFile} class="select-button">
+          <button 
+            type="button" 
+            on:click={selectAudioFile} 
+            class="select-button"
+            disabled={disabled}
+          >
             Select Audio File
           </button>
-          <button type="button" on:click={selectSRTFile} class="select-button">
+          <button 
+            type="button" 
+            on:click={selectSRTFile} 
+            class="select-button"
+            disabled={disabled}
+          >
             Select SRT File
           </button>
         </div>
@@ -203,6 +216,14 @@
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+  
+  .drop-zone.disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    border-color: #ddd;
+    background: #f5f5f5;
+    pointer-events: none;
   }
   
   .drop-zone.drag-over {

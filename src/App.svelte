@@ -3,12 +3,16 @@
   import SubtitleDisplay from './components/SubtitleDisplay.svelte';
   import SimpleAudioUpload from './components/SimpleAudioUpload.svelte';
   import SimpleWavePlayer from './components/SimpleWavePlayer.svelte';
+  import VideoSelector from './components/VideoSelector.svelte';
   import type { SubtitleEntry } from './lib/srt-parser';
+  import { FileUtils } from './lib/file-service';
   
   let selectedAudioFile: File | null = null;
   let selectedSRTFile: File | null = null;
   let errorMessage = '';
+  let isProcessing = false;
   let parsedSubtitles: SubtitleEntry[] = [];
+  let isElectron = typeof window !== 'undefined' && 'electronAPI' in window;
   
   function handleAudioSelected(event: CustomEvent<{ file: File }>) {
     selectedAudioFile = event.detail.file;
@@ -37,6 +41,50 @@
     errorMessage = '';
     console.log('Audio uploaded:', selectedAudioFile.name);
   }
+  
+  function handleVideoAudioExtracted(event: CustomEvent<{ audioPath: string; srtPath?: string | null }>) {
+    // Create a File-like object for the extracted audio
+    const filename = event.detail.audioPath.split(/[\\/]/).pop() || '';
+    const fileObject = {
+      name: filename,
+      path: event.detail.audioPath,
+      size: 0, // Size not available
+      type: 'audio/mp3',
+      lastModified: Date.now(),
+      isElectronFile: true, // Flag to indicate this is an Electron file
+    };
+    
+    selectedAudioFile = fileObject as any as File;
+    errorMessage = '';
+    console.log('Video audio extracted:', event.detail.audioPath);
+    
+    // If we found a subtitle file, load it too
+    if (event.detail.srtPath) {
+      console.log('Found matching subtitle file:', event.detail.srtPath);
+      
+      // Create a File-like object for the subtitle 
+      const srtFilename = event.detail.srtPath.split(/[\\/]/).pop() || '';
+      
+      // Create a simpler file-like object that our components can handle
+      const srtFileObject = {
+        name: srtFilename,
+        path: event.detail.srtPath,
+        size: 0, // Size not available
+        type: 'application/x-subrip',
+        lastModified: Date.now(),
+        isElectronFile: true, // Flag to indicate this is an Electron file
+      };
+      
+      // Set the subtitle file immediately with the path-based object
+      // Our components are now updated to handle this format properly
+      selectedSRTFile = srtFileObject as any as File;
+      console.log('Set path-based subtitle file object');
+    }
+  }
+  
+  function handleProcessingChange(event: CustomEvent<{ isProcessing: boolean }>) {
+    isProcessing = event.detail.isProcessing;
+  }
 </script>
 
 <main>
@@ -46,10 +94,22 @@
   </header>
 
   <div class="upload-section">
+    {#if isElectron}
+      <div class="electron-features">
+        <VideoSelector
+          on:audioLoaded={handleVideoAudioExtracted}
+          on:error={handleError}
+          on:processing={handleProcessingChange}
+        />
+        <div class="separator">OR</div>
+      </div>
+    {/if}
+    
     <FileUpload 
       on:audioSelected={handleAudioSelected}
       on:srtSelected={handleSRTSelected}
       on:error={handleError}
+      disabled={isProcessing}
     />
     
     {#if errorMessage}
@@ -128,5 +188,35 @@
     border-radius: 6px;
     color: #c33;
     text-align: center;
+  }
+  
+  .electron-features {
+    margin-bottom: 1.5rem;
+  }
+  
+  .separator {
+    text-align: center;
+    margin: 1.5rem 0;
+    position: relative;
+    font-weight: bold;
+    color: #888;
+  }
+  
+  .separator::before,
+  .separator::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 45%;
+    height: 1px;
+    background-color: #ddd;
+  }
+  
+  .separator::before {
+    left: 0;
+  }
+  
+  .separator::after {
+    right: 0;
   }
 </style>

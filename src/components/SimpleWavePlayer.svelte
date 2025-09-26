@@ -662,11 +662,33 @@
 
 
 
-  function loadAudioFile() {
+  async function loadAudioFile() {
     if (audioFile && wavesurfer) {
       isAudioReady = false; // Reset audio ready state
-      const url = URL.createObjectURL(audioFile);
-      wavesurfer.load(url);
+      
+      // Check if this is an Electron File-like object with a path
+      if ('path' in audioFile && window.electronAPI) {
+        try {
+          console.log('Loading audio file from path:', (audioFile as any).path);
+          
+          // Load the file using Electron's IPC
+          const result = await window.electronAPI.readAudioFile((audioFile as any).path);
+          if (result.success && result.buffer) {
+            // Create a blob from the array buffer
+            const blob = new Blob([new Uint8Array(result.buffer)], { type: 'audio/mp3' });
+            const url = URL.createObjectURL(blob);
+            wavesurfer.load(url);
+          } else {
+            console.error('Failed to read audio file:', result.error);
+          }
+        } catch (error) {
+          console.error('Error loading audio file:', error);
+        }
+      } else {
+        // Regular File object, use the standard approach
+        const url = URL.createObjectURL(audioFile);
+        wavesurfer.load(url);
+      }
     }
   }
 

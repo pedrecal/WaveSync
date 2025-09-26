@@ -49,13 +49,30 @@
       isLoading = true;
       parseError = null;
       
-      // Read file content
-      const content = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(reader.error);
-        reader.readAsText(file);
-      });
+      // Handle different file types
+      let content: string;
+      
+      // Check if this is an Electron path-based file
+      if ((file as any).isElectronFile && (file as any).path && window.electronAPI?.readSubtitleFile) {
+        // Use Electron's API to read the file
+        const result = await window.electronAPI.readSubtitleFile((file as any).path);
+        if (!result.success || !result.content) {
+          throw new Error(result.error || 'Failed to read subtitle file');
+        }
+        content = result.content;
+      } else {
+        // Use standard FileReader API for regular File objects
+        content = await new Promise<string>((resolve, reject) => {
+          try {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsText(file);
+          } catch (error) {
+            reject(new Error(`Failed to read file: ${error instanceof Error ? error.message : String(error)}`));
+          }
+        });
+      }
       
       // Parse SRT content
       entries = parseSRT(content);

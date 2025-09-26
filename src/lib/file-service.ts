@@ -91,6 +91,151 @@ export class WebFileService implements FileService {
 /**
  * Utility functions for file handling
  */
+/**
+ * Electron-based file service implementation
+ */
+export class ElectronFileService implements FileService {
+  async pickFile(accept?: string): Promise<File | null> {
+    // Check if electron API is available
+    if (!window.electronAPI) {
+      console.warn('Electron API not available, falling back to web file picker');
+      // Fall back to web implementation
+      const webService = new WebFileService();
+      return webService.pickFile(accept);
+    }
+
+    try {
+      // Handle specific file types
+      if (accept?.includes('video/')) {
+        const result = await window.electronAPI.selectVideoFile();
+        if (result.cancelled || !result.videoPath) {
+          return null;
+        }
+
+        // Create a File-like object from the path
+        const filename = result.videoPath.split(/[\\/]/).pop() || '';
+        const fileObject = {
+          name: filename,
+          path: result.videoPath,
+          size: 0, // Size not available here
+          type: this.getMimeType(filename),
+          lastModified: Date.now(),
+        };
+
+        return fileObject as any as File;
+      }
+
+      // For other file types, fall back to web implementation for now
+      const webService = new WebFileService();
+      return webService.pickFile(accept);
+    } catch (error) {
+      console.error('Error picking file via Electron:', error);
+      return null;
+    }
+  }
+
+  async readAsText(file: File): Promise<string> {
+    // Handle File-like objects created by ElectronFileService
+    if (('path' in file || (file as any).isElectronFile) && window.electronAPI) {
+      try {
+        // Log what we're trying to read for debugging
+        console.log('Reading Electron file as text:', (file as any).path);
+
+        // Use readSubtitleFile for text files
+        if (window.electronAPI.readSubtitleFile) {
+          const result = await window.electronAPI.readSubtitleFile((file as any).path);
+          if (!result.success) {
+            console.error('Failed to read subtitle file:', result.error);
+            throw new Error(result.error || 'Failed to read file');
+          }
+          return result.content || '';
+        } else {
+          // For backward compatibility, use readAudioFile and convert
+          const result = await window.electronAPI.readAudioFile((file as any).path);
+          if (!result.success) {
+            console.error('Failed to read audio file:', result.error);
+            throw new Error(result.error || 'Failed to read file');
+          }
+          // Convert ArrayBuffer to string
+          const decoder = new TextDecoder('utf-8');
+          return decoder.decode(result.buffer);
+        }
+      } catch (error) {
+        console.error('Error reading file as text via Electron:', error);
+        // If the file is a regular File (not a File-like object from Electron),
+        // we can try the standard FileReader approach as a fallback
+        if (file instanceof Blob) {
+          console.log('Falling back to WebFileService for Blob');
+          return new WebFileService().readAsText(file);
+        }
+        throw error;
+      }
+    }
+
+    // Fall back to web implementation for regular File objects
+    if (file instanceof Blob) {
+      return new WebFileService().readAsText(file);
+    } else {
+      console.error('Invalid file object:', file);
+      throw new Error('Cannot read file: not a valid File or Blob object');
+    }
+  }
+
+  async readAsArrayBuffer(file: File): Promise<ArrayBuffer> {
+    // Handle File-like objects created by ElectronFileService
+    if (('path' in file || (file as any).isElectronFile) && window.electronAPI) {
+      try {
+        const result = await window.electronAPI.readAudioFile((file as any).path);
+        if (!result.success || !result.buffer) {
+          throw new Error(result.error || 'Failed to read audio file');
+        }
+        return result.buffer;
+      } catch (error) {
+        console.error('Error reading file as array buffer via Electron:', error);
+        throw error;
+      }
+    }
+
+    // Fall back to web implementation for regular File objects
+    return new WebFileService().readAsArrayBuffer(file);
+  }
+
+  async findCompanionSRT(videoFile: File): Promise<File | null> {
+    // TODO: Implement companion SRT discovery in Electron
+    // For now, fall back to web implementation
+    return null;
+  }
+
+  private getMimeType(filename: string): string {
+    const ext = filename.toLowerCase().split('.').pop();
+    const mimeTypes: Record<string, string> = {
+      mp4: 'video/mp4',
+      mkv: 'video/x-matroska',
+      avi: 'video/x-msvideo',
+      mov: 'video/quicktime',
+      webm: 'video/webm',
+      mp3: 'audio/mpeg',
+      wav: 'audio/wav',
+      srt: 'application/x-subrip',
+    };
+
+    return mimeTypes[ext || ''] || 'application/octet-stream';
+  }
+}
+
+/**
+ * Factory function to get the appropriate file service
+ */
+export function getFileService(): FileService {
+  // Check if we're running in Electron
+  if (typeof window !== 'undefined' && window.electronAPI) {
+    return new ElectronFileService();
+  }
+
+  // Fall back to web implementation
+  return new WebFileService();
+}
+
 export class FileUtils {
   /**
    * Extract base name without extension and language suffix
